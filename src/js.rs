@@ -53,11 +53,15 @@ impl JsGenerator {
             }
 
             class Api {
-                async fetch(url) {
-                    this.instance = await fetchAndInstantiate(url, {});
+                async fetch(url, imports) {
+                    this.instance = await fetchAndInstantiate(url, imports);
                 }
 
                 #(for func in iface.into_functions() => #(self.generate_function(func)))
+            }
+
+            module.exports = {
+                Api: Api,
             }
         }
     }

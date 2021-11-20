@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "macro", "example/rust"]
+
 [package]
 name = "ffi-gen"
 version = "0.1.0"

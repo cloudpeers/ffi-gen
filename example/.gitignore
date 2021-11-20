@@ -1,0 +1,15 @@
+# rust
+/target
+Cargo.lock
+
+# node
+/node_modules
+package-lock.json
+
+# dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
