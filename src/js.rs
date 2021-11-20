@@ -71,8 +71,8 @@ impl JsGenerator {
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(feature = "test_runner")]
+pub mod test_runner {
     use super::*;
     use crate::{Abi, RustGenerator};
     use anyhow::Result;
@@ -80,7 +80,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use trybuild::TestCases;
 
-    fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
+    pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
         let rust_gen = RustGenerator::new(Abi::Native);

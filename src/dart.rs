@@ -84,8 +84,8 @@ impl DartGenerator {
     }
 }
 
-#[cfg(test)]
-mod tests {
+#[cfg(feature = "test_runner")]
+pub mod test_runner {
     use super::*;
     use crate::{Abi, RustGenerator};
     use anyhow::Result;
@@ -93,7 +93,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use trybuild::TestCases;
 
-    fn compile_pass(iface: &str, rust: rust::Tokens, dart: dart::Tokens) -> Result<()> {
+    pub fn compile_pass(iface: &str, rust: rust::Tokens, dart: dart::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
         let rust_gen = RustGenerator::new(Abi::Native);
@@ -156,17 +156,5 @@ mod tests {
         let test = TestCases::new();
         test.pass(runner_file.as_ref());
         Ok(())
-    }
-
-    #[test]
-    fn no_args_no_ret() {
-        compile_pass(
-            "hello_world fn();",
-            quote!(
-                pub fn hello_world() {}
-            ),
-            quote!(api.hello_world();),
-        )
-        .unwrap();
     }
 }
