@@ -1,0 +1,32 @@
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+arg = { ident ~ ":" ~ type_ }
+args = { (arg ~ ("," ~ arg)*)? }
+async_ = { "async" }
+function_type = { async_? ~ "fn" ~ "(" ~ args ~ ")" ~ ("->" ~ type_)? }
+
+primitive = {
+    "u8" | "u16" | "u32" | "u64" | "usize" |
+    "i8" | "i16" | "i32" | "i64" | "isize" |
+    "bool" | "f32" | "f64" | "string"
+}
+ref_ = { "&" ~ type_ }
+mut_ = { "&mut" ~ type_ }
+slice = { "[" ~ type_ ~ "]" }
+box_ = { "Box" ~ "<" ~ type_ ~ ">" }
+vec = { "Vec" ~ "<" ~ type_ ~ ">" }
+opt = { "Option" ~ "<" ~ type_ ~ ">" }
+res = { "Result" ~ "<" ~ type_ ~ ">" }
+
+type_ = { primitive | mut_ | ref_ | slice | box_ | vec | opt | res | function_type | ident }
+
+static_ = { "static" }
+method = { static_? ~ function }
+object = { "object" ~ ident ~ "{" ~ method* ~ "}" }
+function = { ident ~ function_type ~ ";" }
+
+item = { object | function }
+root = { SOI ~ item* ~ EOI }
+
+WHITESPACE = _{ " " | "\t" | "\n" }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
