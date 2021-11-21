@@ -9,41 +9,71 @@ compile_pass! {
     ( api.hello_world(); ),
 }
 
+compile_pass! {
+    no_args_ret_u8,
+    "hello_world fn() -> u8;",
+    (
+        pub fn hello_world() -> u8 {
+            42
+        }
+    ),
+    ( assert_eq!(__hello_world(), 42); ),
+    ( assert(api.hello_world() == 42); ),
+    ( assert.equal(api.hello_world(), 42); ),
+}
+
+compile_pass! {
+    args_u8_ret_u8,
+    "hello_world fn(arg: u8) -> u8;",
+    (
+        pub fn hello_world(arg: u8) -> u8 {
+            arg
+        }
+    ),
+    ( assert_eq!(__hello_world(42), 42); ),
+    ( assert(api.hello_world(42) == 42); ),
+    ( assert.equal(api.hello_world(42), 42); ),
+}
+
+compile_pass! {
+    args_bool_ret_bool,
+    "hello_world fn(arg: bool) -> bool;",
+    (
+        pub fn hello_world(arg: bool) -> bool {
+            arg
+        }
+    ),
+    ( assert_eq!(__hello_world(true), true); ),
+    ( assert(api.hello_world(true) == true); ),
+    ( assert.equal(api.hello_world(true), true); ),
+}
+
+compile_pass! {
+    args_usize_ret_usize,
+    "hello_world fn(arg: usize) -> usize;",
+    (
+        pub fn hello_world(arg: usize) -> usize {
+            arg
+        }
+    ),
+    ( assert_eq!(__hello_world(42), 42); ),
+    ( assert(api.hello_world(42) == 42); ),
+    ( assert.equal(api.hello_world(42), 42); ),
+}
+
+compile_pass! {
+    args_f64_ret_f64,
+    "hello_world fn(arg: f64) -> f64;",
+    (
+        pub fn hello_world(arg: f64) -> f64 {
+            arg
+        }
+    ),
+    ( assert_eq!(__hello_world(42.24), 42.24); ),
+    ( assert(api.hello_world(42.24) == 42.24); ),
+    ( assert.equal(api.hello_world(42.24), 42.24); ),
+}
 /*
-#[test]
-fn no_args_ret_u8() {
-    compile_pass(
-        "hello_world fn() -> u8;",
-        quote! {
-            pub fn hello_world() -> u8 {
-                42
-            }
-
-            fn main() {
-                assert_eq!(__hello_world(), 42);
-            }
-        },
-    )
-    .unwrap();
-}
-
-#[test]
-fn args_u8_ret_u8() {
-    compile_pass(
-        "hello_world fn(arg: u8) -> u8;",
-        quote! {
-            pub fn hello_world(arg: u8) -> u8 {
-                arg
-            }
-
-            fn main() {
-                assert_eq!(__hello_world(42), 42);
-            }
-        },
-    )
-    .unwrap();
-}
-
 #[test]
 fn args_str_ret_usize() {
     compile_pass(

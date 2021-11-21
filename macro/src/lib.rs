@@ -6,11 +6,12 @@ use quote::quote;
 #[proc_macro]
 pub fn ffi_gen(input: TokenStream) -> TokenStream {
     let input: TokenStream2 = input.into();
-    quote! {
+    (quote! {
         #[cfg_attr(target_family = "wasm", ffi_gen_macro::ffi_gen_wasm(#input))]
         #[cfg_attr(not(target_family = "wasm"), ffi_gen_macro::ffi_gen_native(#input))]
         struct Api;
-    }.into()
+    })
+    .into()
 }
 
 #[proc_macro_attribute]

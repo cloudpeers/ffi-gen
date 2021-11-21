@@ -1,4 +1,4 @@
-use crate::{AbiFunction, Interface};
+use crate::{AbiFunction, Interface, Type};
 use genco::prelude::*;
 
 pub struct JsGenerator {}
@@ -66,13 +66,56 @@ impl JsGenerator {
         }
     }
 
-    pub fn generate_function(&self, func: AbiFunction) -> js::Tokens {
+    fn generate_function(&self, func: AbiFunction) -> js::Tokens {
         quote! {
-            #(&func.name)() {
-                this.instance.exports.#(format!("__{}", &func.name))();
+            #(&func.name)(#(for (name, _) in &func.args => #name,)) {
+                return this.instance.exports.#(format!("__{}", &func.name))(
+                    #(for (name, _) in &func.args => #name,));
             }
         }
     }
+
+    /*fn generate_arg(&self, name: &str, ty: &Type) -> js::Tokens {
+        match ty {
+            Type::U8
+            | Type::U16
+            | Type::U32
+            | Type::U64
+            | Type::Usize
+            | Type::I8
+            | Type::I16
+            | Type::I32
+            | Type::I64
+            | Type::Isize
+            | Type::Bool
+            | Type::F32
+            | Type::F64 => quote!(#name,),
+            ty => todo!("arg {:?}", ty),
+        }
+    }*/
+
+    /*fn generate_return(&self, ret: Option<&Type>) -> js::Tokens {
+        if let Some(ret) = ret {
+            match ret {
+                Type::U8
+                | Type::U16
+                | Type::U32
+                | Type::U64
+                | Type::Usize
+                | Type::I8
+                | Type::I16
+                | Type::I32
+                | Type::I64
+                | Type::Isize => quote!(int),
+                Type::Bool => quote!(bool),
+                Type::F32
+                | Type::F64 => quote!(double),
+                ret => todo!("ret {:?}", ret),
+            }
+        } else {
+            quote!();
+        }
+    }*/
 }
 
 #[cfg(feature = "test_runner")]
@@ -103,6 +146,7 @@ pub mod test_runner {
             #js_tokens
 
             async function main() {
+                const assert = require("assert");
                 const api = new Api();
                 await api.fetch(#_(#(library_file.as_ref().to_str().unwrap())));
                 #js
