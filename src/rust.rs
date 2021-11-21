@@ -38,6 +38,22 @@ impl RustGenerator {
                 pub cap: u32,
             }
 
+            #[no_mangle]
+            pub unsafe extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
+                let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
+                let ptr = std::alloc::alloc(layout);
+                if ptr.is_null() {
+                    std::alloc::handle_alloc_error(layout);
+                }
+                ptr
+            }
+
+            #[no_mangle]
+            pub unsafe extern "C" fn deallocate(ptr: *mut u8, size: usize, align: usize) {
+                let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
+                std::alloc::dealloc(ptr, layout);
+            }
+
             #(for func in iface.into_functions() => #(self.generate_function(func)))
         }
     }

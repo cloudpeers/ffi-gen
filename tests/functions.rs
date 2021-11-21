@@ -73,26 +73,24 @@ compile_pass! {
     ( assert(api.hello_world(42.24) == 42.24); ),
     ( assert.equal(api.hello_world(42.24), 42.24); ),
 }
-/*
-#[test]
-fn args_str_ret_usize() {
-    compile_pass(
-        "strlen fn(arg: &string) -> usize;",
-        quote! {
-            pub fn strlen(s: &str) -> usize {
-                s.len()
-            }
 
-            fn main() {
-                let s = "hello world";
-                assert_eq!(__strlen(s.as_ptr() as isize, s.len()), 11);
-            }
-        },
-    )
-    .unwrap();
+compile_pass! {
+    args_str_ret_usize,
+    "strlen fn(arg: &string) -> usize;",
+    (
+        pub fn strlen(s: &str) -> usize {
+            s.len()
+        }
+    ),
+    (
+        let s = "hello world";
+        assert_eq!(__strlen(s.as_ptr() as isize, s.len()), 11);
+    ),
+    ( assert(api.strlen("hello world") == 11); ),
+    ( assert.equal(api.strlen("hello world"), 11); ),
 }
 
-#[test]
+/*#[test]
 fn args_string_ret_usize() {
     compile_pass(
         "strlen fn(arg: string) -> usize;",
