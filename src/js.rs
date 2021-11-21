@@ -1,4 +1,4 @@
-use crate::{AbiFunction, Interface, Type};
+use crate::{AbiFunction, Interface};
 use genco::prelude::*;
 
 pub struct JsGenerator {}
@@ -74,48 +74,6 @@ impl JsGenerator {
             }
         }
     }
-
-    /*fn generate_arg(&self, name: &str, ty: &Type) -> js::Tokens {
-        match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize
-            | Type::Bool
-            | Type::F32
-            | Type::F64 => quote!(#name,),
-            ty => todo!("arg {:?}", ty),
-        }
-    }*/
-
-    /*fn generate_return(&self, ret: Option<&Type>) -> js::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                Type::U8
-                | Type::U16
-                | Type::U32
-                | Type::U64
-                | Type::Usize
-                | Type::I8
-                | Type::I16
-                | Type::I32
-                | Type::I64
-                | Type::Isize => quote!(int),
-                Type::Bool => quote!(bool),
-                Type::F32
-                | Type::F64 => quote!(double),
-                ret => todo!("ret {:?}", ret),
-            }
-        } else {
-            quote!();
-        }
-    }*/
 }
 
 #[cfg(feature = "test_runner")]
@@ -130,7 +88,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let rust_gen = RustGenerator::new(Abi::Native);
+        let rust_gen = RustGenerator::new(Abi::Wasm(32));
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::new();

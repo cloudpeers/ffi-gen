@@ -42,7 +42,7 @@ class Api {
   }
 
   hello_world() {
-    this.instance.exports.__hello_world();
+    return this.instance.exports.__hello_world();
   }
 }
 

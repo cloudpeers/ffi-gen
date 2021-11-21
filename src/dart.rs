@@ -1,4 +1,4 @@
-use crate::{AbiFunction, Interface, Type};
+use crate::{AbiFunction, AbiType, Interface, PrimType};
 use genco::prelude::*;
 use genco::tokens::static_literal;
 
@@ -135,164 +135,67 @@ impl DartGenerator {
         }
     }
 
-    fn generate_arg(&self, name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_arg(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize => quote!(int #name,),
-            Type::Bool => quote!(bool #name,),
-            Type::F32 | Type::F64 => quote!(double #name,),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote!(String #name,),
-                arg => todo!("arg &{:?}", arg),
-            },
+            AbiType::Prim(ty) => quote!(#(self.generate_prim_type(*ty)) #name,),
+            AbiType::RefStr => quote!(String #name,),
             arg => todo!("arg {:?}", arg),
         }
     }
 
-    fn generate_arg_native(&self, _name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_arg_native(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8 => quote!(ffi.Uint8,),
-            Type::U16 => quote!(ffi.Uint16,),
-            Type::U32 => quote!(ffi.Uint32,),
-            Type::U64 => quote!(ffi.Uint64,),
-            Type::Usize => quote!(ffi.IntPtr,),
-            Type::I8 => quote!(ffi.Int8,),
-            Type::I16 => quote!(ffi.Int16,),
-            Type::I32 => quote!(ffi.Int32,),
-            Type::I64 => quote!(ffi.Int64,),
-            Type::Isize => quote!(ffi.IntPtr,),
-            Type::Bool => quote!(ffi.Uint8,),
-            Type::F32 => quote!(ffi.Float,),
-            Type::F64 => quote!(ffi.Double,),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr,),
-                arg => todo!("arg &{:?}", arg),
-            },
+            AbiType::Prim(ty) => quote!(#(self.generate_prim_type_native(*ty)),),
+            AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr,),
             arg => todo!("arg {:?}", arg),
         }
     }
 
-    fn generate_arg_wrapped(&self, _name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_arg_wrapped(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize => quote!(int),
-            Type::Bool => quote!(int),
-            Type::F32 | Type::F64 => quote!(double),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote!(ffi.Pointer<ffi.Uint8>, int,),
-                arg => todo!("arg &{:?}", arg),
-            },
+            AbiType::Prim(ty) => quote!(#(self.generate_prim_type_wrapped(*ty)),),
+            AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, int,),
             arg => todo!("arg {:?}", arg),
         }
     }
 
-    fn generate_lower(&self, name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_lower(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize
-            | Type::F32
-            | Type::F64 => quote!(),
-            Type::Bool => quote!(final int #(name)_int = #name ? 1 : 0;),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote! {
-                    final #(name)_utf8 = utf8.encode(#(name));
-                    final int #(name)_len = #(name)_utf8.length;
-                    final ffi.Pointer<ffi.Uint8> #(name)_ptr = this.allocate(#(name)_len, 1);
-                    final Uint8List #(name)_view = #(name)_ptr.asTypedList(#(name)_len);
-                    #(name)_view.setAll(0, #(name)_utf8);
-                },
-                arg => todo!("arg &{:?}", arg),
+            AbiType::Prim(PrimType::Bool) => quote!(final int #(name)_int = #name ? 1 : 0;),
+            AbiType::Prim(_) => quote!(),
+            AbiType::RefStr => quote! {
+                final #(name)_utf8 = utf8.encode(#(name));
+                final int #(name)_len = #(name)_utf8.length;
+                final ffi.Pointer<ffi.Uint8> #(name)_ptr = this.allocate(#(name)_len, 1);
+                final Uint8List #(name)_view = #(name)_ptr.asTypedList(#(name)_len);
+                #(name)_view.setAll(0, #(name)_utf8);
             },
             arg => todo!("lower arg {:?}", arg),
         }
     }
 
-    fn generate_lower_args(&self, name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_lower_args(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize
-            | Type::F32
-            | Type::F64 => quote!(#name),
-            Type::Bool => quote!(#(name)_int,),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote!(#(name)_ptr, #(name)_len,),
-                arg => todo!("arg &{:?}", arg),
-            },
+            AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
+            AbiType::Prim(_) => quote!(#(name)),
+            AbiType::RefStr => quote!(#(name)_ptr, #(name)_len,),
             arg => todo!("lower arg {:?}", arg),
         }
     }
 
-    fn generate_lower_cleanup(&self, name: &str, ty: &Type) -> dart::Tokens {
+    fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            Type::U8
-            | Type::U16
-            | Type::U32
-            | Type::U64
-            | Type::Usize
-            | Type::I8
-            | Type::I16
-            | Type::I32
-            | Type::I64
-            | Type::Isize
-            | Type::Bool
-            | Type::F32
-            | Type::F64 => quote!(),
-            Type::Ref(inner) => match &**inner {
-                Type::String => quote!(this.deallocate(#(name)_ptr, #(name)_len, 1);),
-                arg => todo!("arg &{:?}", arg),
-            },
+            AbiType::Prim(_) => quote!(),
+            AbiType::RefStr => quote!(this.deallocate(#(name)_ptr, #(name)_len, 1);),
             arg => todo!("lower arg {:?}", arg),
         }
     }
 
-    fn generate_lift(&self, ret: Option<&Type>) -> dart::Tokens {
+    fn generate_lift(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                Type::U8
-                | Type::U16
-                | Type::U32
-                | Type::U64
-                | Type::Usize
-                | Type::I8
-                | Type::I16
-                | Type::I32
-                | Type::I64
-                | Type::Isize
-                | Type::F32
-                | Type::F64 => quote!(return ret;),
-                Type::Bool => quote!(return ret > 0;),
+                AbiType::Prim(PrimType::Bool) => quote!(return ret > 0;),
+                AbiType::Prim(_) => quote!(return ret;),
                 arg => todo!("lift arg {:?}", arg),
             }
         } else {
@@ -300,21 +203,10 @@ impl DartGenerator {
         }
     }
 
-    fn generate_return(&self, ret: Option<&Type>) -> dart::Tokens {
+    fn generate_return(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                Type::U8
-                | Type::U16
-                | Type::U32
-                | Type::U64
-                | Type::Usize
-                | Type::I8
-                | Type::I16
-                | Type::I32
-                | Type::I64
-                | Type::Isize => quote!(int),
-                Type::Bool => quote!(bool),
-                Type::F32 | Type::F64 => quote!(double),
+                AbiType::Prim(ty) => self.generate_prim_type(*ty),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
@@ -322,22 +214,10 @@ impl DartGenerator {
         }
     }
 
-    fn generate_return_native(&self, ret: Option<&Type>) -> dart::Tokens {
+    fn generate_return_native(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                Type::U8 => quote!(ffi.Uint8),
-                Type::U16 => quote!(ffi.Uint16),
-                Type::U32 => quote!(ffi.Uint32),
-                Type::U64 => quote!(ffi.Uint64),
-                Type::Usize => quote!(ffi.IntPtr),
-                Type::I8 => quote!(ffi.Int8),
-                Type::I16 => quote!(ffi.Int16),
-                Type::I32 => quote!(ffi.Int32),
-                Type::I64 => quote!(ffi.Int64),
-                Type::Isize => quote!(ffi.IntPtr),
-                Type::Bool => quote!(ffi.Uint8),
-                Type::F32 => quote!(ffi.Float),
-                Type::F64 => quote!(ffi.Double),
+                AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
@@ -345,25 +225,66 @@ impl DartGenerator {
         }
     }
 
-    fn generate_return_wrapped(&self, ret: Option<&Type>) -> dart::Tokens {
+    fn generate_return_wrapped(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                Type::U8
-                | Type::U16
-                | Type::U32
-                | Type::U64
-                | Type::Usize
-                | Type::I8
-                | Type::I16
-                | Type::I32
-                | Type::I64
-                | Type::Isize => quote!(int),
-                Type::Bool => quote!(int),
-                Type::F32 | Type::F64 => quote!(double),
+                AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
             quote!(void)
+        }
+    }
+
+    fn generate_prim_type_native(&self, ty: PrimType) -> dart::Tokens {
+        match ty {
+            PrimType::U8 => quote!(ffi.Uint8),
+            PrimType::U16 => quote!(ffi.Uint16),
+            PrimType::U32 => quote!(ffi.Uint32),
+            PrimType::U64 => quote!(ffi.Uint64),
+            PrimType::Usize => quote!(ffi.IntPtr),
+            PrimType::I8 => quote!(ffi.Int8),
+            PrimType::I16 => quote!(ffi.Int16),
+            PrimType::I32 => quote!(ffi.Int32),
+            PrimType::I64 => quote!(ffi.Int64),
+            PrimType::Isize => quote!(ffi.IntPtr),
+            PrimType::Bool => quote!(ffi.Uint8),
+            PrimType::F32 => quote!(ffi.Float),
+            PrimType::F64 => quote!(ffi.Double),
+        }
+    }
+
+    fn generate_prim_type_wrapped(&self, ty: PrimType) -> dart::Tokens {
+        match ty {
+            PrimType::U8
+            | PrimType::U16
+            | PrimType::U32
+            | PrimType::U64
+            | PrimType::Usize
+            | PrimType::I8
+            | PrimType::I16
+            | PrimType::I32
+            | PrimType::I64
+            | PrimType::Isize
+            | PrimType::Bool => quote!(int),
+            PrimType::F32 | PrimType::F64 => quote!(double),
+        }
+    }
+
+    fn generate_prim_type(&self, ty: PrimType) -> dart::Tokens {
+        match ty {
+            PrimType::U8
+            | PrimType::U16
+            | PrimType::U32
+            | PrimType::U64
+            | PrimType::Usize
+            | PrimType::I8
+            | PrimType::I16
+            | PrimType::I32
+            | PrimType::I64
+            | PrimType::Isize => quote!(int),
+            PrimType::Bool => quote!(bool),
+            PrimType::F32 | PrimType::F64 => quote!(double),
         }
     }
 }
@@ -380,7 +301,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, dart: dart::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let rust_gen = RustGenerator::new(Abi::Native);
+        let rust_gen = RustGenerator::new(Abi::native());
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut dart_file = NamedTempFile::new()?;
         let dart_gen = DartGenerator::new("compile_pass".to_string());
