@@ -75,22 +75,25 @@ impl RustGenerator {
     fn generate_arg(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#name: #(self.generate_prim_type(*ty)),),
-            AbiType::RefStr => quote! {
+            AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                 #(name)_ptr: #(self.generate_isize()),
                 #(name)_len: #(self.generate_usize()),
             },
-            AbiType::String => quote! {
+            AbiType::String | AbiType::Vec(_) => quote! {
                 #(name)_ptr: #(self.generate_isize()),
                 #(name)_len: #(self.generate_usize()),
                 #(name)_cap: #(self.generate_usize()),
             },
-            _ => todo!("arg {:?}", ty),
         }
     }
 
     fn generate_lift(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
             AbiType::Prim(_) => quote!(let #(name) = #(name) as _;),
+            AbiType::RefSlice(ty) => quote! {
+                let #name: &[#(self.generate_prim_type(*ty))] =
+                    unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
+            },
             AbiType::RefStr => quote! {
                 let #name: &[u8] = unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
                 let #name: &str = unsafe { std::str::from_utf8_unchecked(#name) };
@@ -104,7 +107,15 @@ impl RustGenerator {
                     )
                 };
             },
-            ty => todo!("lift arg {:?}", ty),
+            AbiType::Vec(ty) => quote! {
+                let #name = unsafe {
+                    Vec::<#(self.generate_prim_type(*ty))>::from_raw_parts(
+                        #(name)_ptr as _,
+                        #(name)_len as _,
+                        #(name)_cap as _,
+                    )
+                };
+            },
         }
     }
 
@@ -112,9 +123,8 @@ impl RustGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => quote!(-> #(self.generate_prim_type(*ty))),
-                AbiType::RefStr => quote!(-> #(self.generate_slice())),
-                AbiType::String => quote!(-> #(self.generate_alloc())),
-                ret => todo!("ret {:?}", ret),
+                AbiType::RefStr | AbiType::RefSlice(_) => quote!(-> #(self.generate_slice())),
+                AbiType::String | AbiType::Vec(_) => quote!(-> #(self.generate_alloc())),
             }
         } else {
             quote!()
@@ -125,14 +135,13 @@ impl RustGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(_) => quote!(ret as _),
-                AbiType::RefStr => quote! {
-                    let ret: &str = ret;
+                AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                     #(self.generate_slice()) {
                         ptr: ret.as_ptr() as _,
                         len: ret.len() as _,
                     }
                 },
-                AbiType::String => quote! {
+                AbiType::String | AbiType::Vec(_) => quote! {
                     use std::mem::ManuallyDrop;
                     let ret = ManuallyDrop::new(ret);
                     #(self.generate_alloc()) {
@@ -141,7 +150,6 @@ impl RustGenerator {
                         cap: ret.capacity() as _,
                     }
                 },
-                _ => todo!("lower ret {:?}", ret),
             }
         } else {
             quote!(drop(ret))
@@ -154,12 +162,12 @@ impl RustGenerator {
             PrimType::U16 => quote!(u16),
             PrimType::U32 => quote!(u32),
             PrimType::U64 => quote!(u64),
-            PrimType::Usize => self.generate_usize(),
+            PrimType::Usize => quote!(usize),
             PrimType::I8 => quote!(i8),
             PrimType::I16 => quote!(i16),
             PrimType::I32 => quote!(i32),
             PrimType::I64 => quote!(i64),
-            PrimType::Isize => self.generate_isize(),
+            PrimType::Isize => quote!(isize),
             PrimType::Bool => quote!(bool),
             PrimType::F32 => quote!(f32),
             PrimType::F64 => quote!(f64),

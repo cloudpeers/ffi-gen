@@ -219,6 +219,7 @@ impl Type {
                 "i16" => Type::I16,
                 "i32" => Type::I32,
                 "i64" => Type::I64,
+                "isize" => Type::Isize,
                 "bool" => Type::Bool,
                 "f32" => Type::F32,
                 "f64" => Type::F64,

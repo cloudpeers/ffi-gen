@@ -8,16 +8,14 @@ import "dart:io" show Platform;
 import "dart:typed_data";
 
 class _Slice extends ffi.Struct {
-  @ffi.IntPtr()
-  external int ptr;
+  external ffi.Pointer<ffi.Uint8> ptr;
 
   @ffi.IntPtr()
   external int len;
 }
 
 class _Alloc extends ffi.Struct {
-  @ffi.IntPtr()
-  external int ptr;
+  external ffi.Pointer<ffi.Uint8> ptr;
 
   @ffi.IntPtr()
   external int len;

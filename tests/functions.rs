@@ -142,3 +142,60 @@ compile_pass! {
     ( assert(api.as_str("hello world") == "hello world"); ),
     ( assert.equal(api.as_str("hello world"), "hello world"); ),
 }
+
+compile_pass! {
+    args_slice_u8_ret_vec_u8,
+    "to_vec fn(b: &[u8]) -> Vec<u8>;",
+    (
+        pub fn to_vec(b: &[u8]) -> Vec<u8> {
+            b.to_vec()
+        }
+    ),
+    ( ),
+    (
+        assert(api.to_vec([]).equals([]));
+        assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
+    ),
+    (
+        assert.equal(api.to_vec([]), []);
+        assert.equal(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
+    ),
+}
+
+compile_pass! {
+    args_slice_u64_ret_vec_u64,
+    "to_vec fn(b: &[u64]) -> Vec<u64>;",
+    (
+        pub fn to_vec(b: &[u64]) -> Vec<u64> {
+            b.to_vec()
+        }
+    ),
+    ( ),
+    (
+        assert(api.to_vec([]).equals([]));
+        assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
+    ),
+    (
+        assert.equal(api.to_vec([]), []);
+        assert.equal(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
+    ),
+}
+
+compile_pass! {
+    args_vec_isize_ret_vec_isize,
+    "reverse fn(b: Vec<isize>) -> Vec<isize>;",
+    (
+        pub fn reverse(b: Vec<isize>) -> Vec<isize> {
+            b.into_iter().rev().collect()
+        }
+    ),
+    ( ),
+    (
+        assert(api.reverse([]).equals([]));
+        assert(api.reverse([0, 1, 2, 3, 4]).equals([4, 3, 2, 1, 0]));
+    ),
+    (
+        assert.equal(api.reverse([]), []);
+        assert.equal(api.reverse([0, 1, 2, 3, 4]), [4, 3, 2, 1, 0]);
+    ),
+}
