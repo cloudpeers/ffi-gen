@@ -169,8 +169,12 @@ impl DartGenerator {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type_wrapped(*ty)),),
             AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, int,),
             AbiType::String => quote!(ffi.Pointer<ffi.Uint8>, int, int,),
-            AbiType::RefSlice(ty) => quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int,),
-            AbiType::Vec(ty) => quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,),
+            AbiType::RefSlice(ty) => {
+                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int,)
+            }
+            AbiType::Vec(ty) => {
+                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,)
+            }
         }
     }
 

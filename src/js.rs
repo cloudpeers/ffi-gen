@@ -1,11 +1,13 @@
-use crate::{AbiFunction, AbiType, Interface};
+use crate::{Abi, AbiFunction, AbiType, Interface, PrimType};
 use genco::prelude::*;
 
-pub struct JsGenerator {}
+pub struct JsGenerator {
+    abi: Abi,
+}
 
 impl JsGenerator {
     pub fn new() -> Self {
-        Self {}
+        Self { abi: Abi::Wasm(32) }
     }
 
     pub fn generate(&self, iface: Interface) -> js::Tokens {
@@ -90,37 +92,48 @@ impl JsGenerator {
     fn generate_lower(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
             AbiType::Prim(_) => quote!(),
-            AbiType::RefStr
-            | AbiType::String => quote! {
+            AbiType::RefStr | AbiType::String => quote! {
                 const #(name)_ptr = this.allocate(#name.length, 1);
                 const #(name)_buf = new Uint8Array(this.instance.exports.memory.buffer, #(name)_ptr, #name.length);
                 const #(name)_encoder = new TextEncoder();
                 #(name)_encoder.encodeInto(#name, #(name)_buf);
             },
-            AbiType::RefSlice(_)
-            | AbiType::Vec(_) => todo!(),
+            AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
+                let (size, align) = self.abi.layout(*ty);
+                quote! {
+                    const #(name)_ptr = this.allocate(#name.length * #size, #align);
+                    const #(name)_buf = new #(self.generate_array(*ty))(
+                        this.instance.exports.memory.buffer, #(name)_ptr, #name.length);
+                    #(name)_buf.set(#name, 0);
+                }
+            }
         }
     }
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
             AbiType::Prim(_) => quote!(#name,),
-            AbiType::RefStr
-            | AbiType::String => quote!(#(name)_ptr, #name.length,),
-            AbiType::RefSlice(_)
-            | AbiType::Vec(_) => todo!(),
+            AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
+            AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
         }
     }
 
     fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(_)
-            | AbiType::String
-            | AbiType::Vec(_) => quote!(),
+            AbiType::Prim(_) | AbiType::String | AbiType::Vec(_) => quote!(),
             AbiType::RefStr => quote! {
-                this.deallocate(#(name)_ptr, #name.length, 1);
+                if (#name.length > 0) {
+                    this.deallocate(#(name)_ptr, #name.length, 1);
+                }
             },
-            AbiType::RefSlice(_) => todo!(),
+            AbiType::RefSlice(ty) => {
+                let (size, align) = self.abi.layout(*ty);
+                quote! {
+                    if (#name.length > 0) {
+                        this.deallocate(#(name)_ptr, #name.length * #size, #align);
+                    }
+                }
+            }
         }
     }
 
@@ -137,9 +150,29 @@ impl JsGenerator {
                     const buf = new Uint8Array(this.instance.exports.memory.buffer, ret[0], ret[1]);
                     const decoder = new TextDecoder();
                     const ret_str = decoder.decode(buf);
-                    this.deallocate(ret[0], ret[2], 1);
+                    if (ret[2] > 0) {
+                        this.deallocate(ret[0], ret[2], 1);
+                    }
                 },
-                _ => todo!(),
+                AbiType::RefSlice(ty) => {
+                    let (size, _align) = self.abi.layout(*ty);
+                    quote! {
+                        const buf = new #(self.generate_array(*ty))(
+                            this.instance.exports.memory.buffer, ret[0], ret[1] * #size);
+                        const ret_arr = Array.from(buf);
+                    }
+                }
+                AbiType::Vec(ty) => {
+                    let (size, align) = self.abi.layout(*ty);
+                    quote! {
+                        const buf = new #(self.generate_array(*ty))(
+                            this.instance.exports.memory.buffer, ret[0], ret[1]);
+                        const ret_arr = Array.from(buf);
+                        if (ret[2] > 0) {
+                            this.deallocate(ret[0], ret[2] * #size, #align);
+                        }
+                    }
+                }
             }
         } else {
             quote!()
@@ -150,12 +183,29 @@ impl JsGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(_) => quote!(return ret;),
-                AbiType::RefStr
-                | AbiType::String => quote!(return ret_str;),
-                _ => todo!(),
+                AbiType::RefStr | AbiType::String => quote!(return ret_str;),
+                AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
             }
         } else {
             quote!()
+        }
+    }
+
+    fn generate_array(&self, ty: PrimType) -> js::Tokens {
+        match ty {
+            PrimType::U8 => quote!(Uint8Array),
+            PrimType::U16 => quote!(Uint16Array),
+            PrimType::U32 => quote!(Uint32Array),
+            PrimType::U64 => quote!(BigUint64Array),
+            PrimType::Usize => quote!(Uint32Array),
+            PrimType::I8 => quote!(Int8Array),
+            PrimType::I16 => quote!(Int16Array),
+            PrimType::I32 => quote!(Int32Array),
+            PrimType::I64 => quote!(BigInt64Array),
+            PrimType::Isize => quote!(Int32Array),
+            PrimType::F32 => quote!(Float32Array),
+            PrimType::F64 => quote!(Float64Array),
+            PrimType::Bool => quote!(Uint8Array),
         }
     }
 }
@@ -165,14 +215,26 @@ pub struct WasmMultiValueShim;
 impl WasmMultiValueShim {
     pub fn generate(path: &str, iface: Interface) -> rust::Tokens {
         let args = Self::generate_args(iface);
-        quote! {
-            let ret = Command::new("multi-value-reverse-polyfill")
-                .arg(#_(#path))
-                #(for arg in args => .arg(#arg))
-                .status()
-                .unwrap()
-                .success();
-            assert!(ret);
+        if !args.is_empty() {
+            quote! {
+                let ret = Command::new("multi-value-reverse-polyfill")
+                    .arg(#_(#path))
+                    #(for arg in args => .arg(#arg))
+                    .status()
+                    .unwrap()
+                    .success();
+                assert!(ret);
+            }
+        } else {
+            quote! {
+                let ret = Command::new("cp")
+                    .arg(#_(#path))
+                    .arg(#_(#(path).multivalue.wasm))
+                    .status()
+                    .unwrap()
+                    .success();
+                assert!(ret);
+            }
         }
     }
 
@@ -190,10 +252,8 @@ impl WasmMultiValueShim {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(_) => None,
-                AbiType::RefStr
-                | AbiType::RefSlice(_) => Some("i32 i32"),
-                AbiType::String
-                | AbiType::Vec(_) => Some("i32 i32 i32"),
+                AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
+                AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
             }
         } else {
             None
@@ -258,8 +318,8 @@ pub mod test_runner {
         let bin = bin_tokens.to_file_string()?;
         js_file.write_all(bin.as_bytes())?;
 
-        let wasm_multi_value = WasmMultiValueShim::generate(
-            library_file.as_ref().to_str().unwrap(), iface);
+        let wasm_multi_value =
+            WasmMultiValueShim::generate(library_file.as_ref().to_str().unwrap(), iface);
 
         let runner_tokens: rust::Tokens = quote! {
             fn main() {

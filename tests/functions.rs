@@ -157,8 +157,8 @@ compile_pass! {
         assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
-        assert.equal(api.to_vec([]), []);
-        assert.equal(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
+        assert.deepEqual(api.to_vec([]), []);
+        assert.deepEqual(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
     ),
 }
 
@@ -176,8 +176,8 @@ compile_pass! {
         assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
-        assert.equal(api.to_vec([]), []);
-        assert.equal(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
+        assert.deepEqual(api.to_vec([]), []);
+        assert.deepEqual(api.to_vec([0n, 1n, 2n, 3n, 4n]), [0n, 1n, 2n, 3n, 4n]);
     ),
 }
 
@@ -195,7 +195,7 @@ compile_pass! {
         assert(api.reverse([0, 1, 2, 3, 4]).equals([4, 3, 2, 1, 0]));
     ),
     (
-        assert.equal(api.reverse([]), []);
-        assert.equal(api.reverse([0, 1, 2, 3, 4]), [4, 3, 2, 1, 0]);
+        assert.deepEqual(api.reverse([]), []);
+        assert.deepEqual(api.reverse([0, 1, 2, 3, 4]), [4, 3, 2, 1, 0]);
     ),
 }
