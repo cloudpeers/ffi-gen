@@ -54,6 +54,8 @@ pub enum AbiType {
     String,
     RefSlice(PrimType),
     Vec(PrimType),
+    Box(String),
+    Ref(String),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -137,12 +139,17 @@ impl Type {
                     AbiType::Prim(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
+                Self::Ident(ident) => AbiType::Ref(ident),
                 ty => unimplemented!("&{:?}", ty),
             },
             Self::String => AbiType::String,
             Self::Vec(inner) => match inner.into_type() {
                 AbiType::Prim(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
+            },
+            Self::Box(inner) => match *inner {
+                Self::Ident(ident) => AbiType::Box(ident),
+                ty => unimplemented!("Box<{:?}>", ty),
             },
             ty => unimplemented!("{:?}", ty),
         }

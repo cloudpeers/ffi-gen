@@ -107,6 +107,7 @@ impl JsGenerator {
                     #(name)_buf.set(#name, 0);
                 }
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -115,6 +116,7 @@ impl JsGenerator {
             AbiType::Prim(_) => quote!(#name,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -134,6 +136,7 @@ impl JsGenerator {
                     }
                 }
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -173,6 +176,7 @@ impl JsGenerator {
                         }
                     }
                 }
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!()
@@ -185,6 +189,7 @@ impl JsGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!()
@@ -251,7 +256,7 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) => None,
+                AbiType::Prim(_) | AbiType::Box(_) | AbiType::Ref(_) => None,
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
             }

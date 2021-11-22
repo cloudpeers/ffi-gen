@@ -97,6 +97,8 @@ impl RustGenerator {
                 #(name)_len: #(self.generate_usize()),
                 #(name)_cap: #(self.generate_usize()),
             },
+            AbiType::Box(ident) => quote!(#name: Box<#ident>,),
+            AbiType::Ref(ident) => quote!(#name: &#ident,),
         }
     }
 
@@ -129,6 +131,7 @@ impl RustGenerator {
                     )
                 };
             },
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(),
         }
     }
 
@@ -138,6 +141,8 @@ impl RustGenerator {
                 AbiType::Prim(ty) => quote!(-> #(self.generate_prim_type(*ty))),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(-> #(self.generate_slice())),
                 AbiType::String | AbiType::Vec(_) => quote!(-> #(self.generate_alloc())),
+                AbiType::Box(ident) => quote!(-> Box<#ident>),
+                AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
             }
         } else {
             quote!()
@@ -163,6 +168,8 @@ impl RustGenerator {
                         cap: ret.capacity() as _,
                     }
                 },
+                AbiType::Box(_) => quote!(ret),
+                AbiType::Ref(_) => unreachable!(),
             }
         } else {
             quote!(drop(ret))

@@ -145,6 +145,7 @@ impl DartGenerator {
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_prim_type(*ty))> #name,)
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -161,6 +162,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr, ffi.IntPtr,)
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -175,6 +177,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,)
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -199,6 +202,7 @@ impl DartGenerator {
                     #(name)_view.setAll(0, #(name));
                 }
             }
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -208,6 +212,7 @@ impl DartGenerator {
             AbiType::Prim(_) => quote!(#(name)),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -218,6 +223,7 @@ impl DartGenerator {
                 quote!(this.deallocate(#(name)_ptr, #(name)_len, 1);)
             }
             AbiType::String | AbiType::Vec(_) => quote!(),
+            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
         }
     }
 
@@ -248,6 +254,7 @@ impl DartGenerator {
                         }
                     }
                 }
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!()
@@ -261,6 +268,7 @@ impl DartGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!()
@@ -275,6 +283,7 @@ impl DartGenerator {
                 AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                     quote!(List<#(self.generate_prim_type(*ty))>)
                 }
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!(void)
@@ -287,6 +296,7 @@ impl DartGenerator {
                 AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!(ffi.Void)
@@ -299,6 +309,7 @@ impl DartGenerator {
                 AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
+                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
             }
         } else {
             quote!(void)
