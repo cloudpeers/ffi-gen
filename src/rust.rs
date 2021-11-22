@@ -38,6 +38,17 @@ impl RustGenerator {
                 pub cap: u64,
             }
 
+            /// Try to execute some function, catching any panics and aborting to make sure Rust
+            /// doesn't unwind across the FFI boundary.
+            pub fn panic_abort<R>(func: impl FnOnce() -> R + std::panic::UnwindSafe) -> R {
+                match std::panic::catch_unwind(func) {
+                    Ok(res) => res,
+                    Err(_) => {
+                        std::process::abort();
+                    }
+                }
+            }
+
             #[no_mangle]
             pub unsafe extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
                 let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
@@ -65,9 +76,11 @@ impl RustGenerator {
                 #(for (name, ty) in &func.args => #(self.generate_arg(name, ty)))
             ) #(self.generate_return(func.ret.as_ref()))
             {
-                #(for (name, ty) in &func.args => #(self.generate_lift(name, ty)))
-                let ret = #(&func.name)(#(for (name, _) in &func.args => #name,));
-                #(self.generate_lower(func.ret.as_ref()))
+                panic_abort(move || {
+                    #(for (name, ty) in &func.args => #(self.generate_lift(name, ty)))
+                    let ret = #(&func.name)(#(for (name, _) in &func.args => #name,));
+                    #(self.generate_lower(func.ret.as_ref()))
+                })
             }
         }
     }
