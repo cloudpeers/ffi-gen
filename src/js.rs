@@ -1,4 +1,4 @@
-use crate::{AbiFunction, Interface};
+use crate::{AbiFunction, AbiType, Interface};
 use genco::prelude::*;
 
 pub struct JsGenerator {}
@@ -57,6 +57,14 @@ impl JsGenerator {
                     this.instance = await fetchAndInstantiate(url, imports);
                 }
 
+                allocate(size, align) {
+                    return this.instance.exports.allocate(size, align);
+                }
+
+                deallocate(ptr, size, align) {
+                    this.instance.exports.deallocate(ptr, size, align);
+                }
+
                 #(for func in iface.into_functions() => #(self.generate_function(func)))
             }
 
@@ -69,9 +77,126 @@ impl JsGenerator {
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
         quote! {
             #(&func.name)(#(for (name, _) in &func.args => #name,)) {
-                return this.instance.exports.#(format!("__{}", &func.name))(
-                    #(for (name, _) in &func.args => #name,));
+                #(for (name, ty) in &func.args => #(self.generate_lower(name, ty)))
+                const ret = this.instance.exports.#(format!("__{}", &func.name))(
+                    #(for (name, ty) in &func.args => #(self.generate_arg(name, ty))));
+                #(self.generate_lift(func.ret.as_ref()))
+                #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(name, ty)))
+                #(self.generate_return_stmt(func.ret.as_ref()))
             }
+        }
+    }
+
+    fn generate_lower(&self, name: &str, ty: &AbiType) -> js::Tokens {
+        match ty {
+            AbiType::Prim(_) => quote!(),
+            AbiType::RefStr
+            | AbiType::String => quote! {
+                const #(name)_ptr = this.allocate(#name.length, 1);
+                const #(name)_buf = new Uint8Array(this.instance.exports.memory.buffer, #(name)_ptr, #name.length);
+                const #(name)_encoder = new TextEncoder();
+                #(name)_encoder.encodeInto(#name, #(name)_buf);
+            },
+            AbiType::RefSlice(_)
+            | AbiType::Vec(_) => todo!(),
+        }
+    }
+
+    fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
+        match ty {
+            AbiType::Prim(_) => quote!(#name,),
+            AbiType::RefStr
+            | AbiType::String => quote!(#(name)_ptr, #name.length,),
+            AbiType::RefSlice(_)
+            | AbiType::Vec(_) => todo!(),
+        }
+    }
+
+    fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> js::Tokens {
+        match ty {
+            AbiType::Prim(_)
+            | AbiType::String
+            | AbiType::Vec(_) => quote!(),
+            AbiType::RefStr => quote! {
+                this.deallocate(#(name)_ptr, #name.length, 1);
+            },
+            AbiType::RefSlice(_) => todo!(),
+        }
+    }
+
+    fn generate_lift(&self, ret: Option<&AbiType>) -> js::Tokens {
+        if let Some(ret) = ret {
+            match ret {
+                AbiType::Prim(_) => quote!(),
+                AbiType::RefStr => quote! {
+                    const buf = new Uint8Array(this.instance.exports.memory.buffer, ret[0], ret[1]);
+                    const decoder = new TextDecoder();
+                    const ret_str = decoder.decode(buf);
+                },
+                AbiType::String => quote! {
+                    const buf = new Uint8Array(this.instance.exports.memory.buffer, ret[0], ret[1]);
+                    const decoder = new TextDecoder();
+                    const ret_str = decoder.decode(buf);
+                    this.deallocate(ret[0], ret[2], 1);
+                },
+                _ => todo!(),
+            }
+        } else {
+            quote!()
+        }
+    }
+
+    fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
+        if let Some(ret) = ret {
+            match ret {
+                AbiType::Prim(_) => quote!(return ret;),
+                AbiType::RefStr
+                | AbiType::String => quote!(return ret_str;),
+                _ => todo!(),
+            }
+        } else {
+            quote!()
+        }
+    }
+}
+
+pub struct WasmMultiValueShim;
+
+impl WasmMultiValueShim {
+    pub fn generate(path: &str, iface: Interface) -> rust::Tokens {
+        let args = Self::generate_args(iface);
+        quote! {
+            let ret = Command::new("multi-value-reverse-polyfill")
+                .arg(#_(#path))
+                #(for arg in args => .arg(#arg))
+                .status()
+                .unwrap()
+                .success();
+            assert!(ret);
+        }
+    }
+
+    fn generate_args(iface: Interface) -> Vec<String> {
+        let mut funcs = vec![];
+        for func in iface.into_functions() {
+            if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
+                funcs.push(format!("\"__{} {}\"", &func.name, ret))
+            }
+        }
+        funcs
+    }
+
+    fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
+        if let Some(ret) = ret {
+            match ret {
+                AbiType::Prim(_) => None,
+                AbiType::RefStr
+                | AbiType::RefSlice(_) => Some("i32 i32"),
+                AbiType::String
+                | AbiType::Vec(_) => Some("i32 i32 i32"),
+            }
+        } else {
+            None
         }
     }
 }
@@ -92,11 +217,19 @@ pub mod test_runner {
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::new();
-        let js_tokens = js_gen.generate(iface);
+        let js_tokens = js_gen.generate(iface.clone());
 
         let library_tokens = quote! {
             #rust_tokens
             #rust
+
+            extern "C" {
+                fn __panic(ptr: isize, len: usize);
+            }
+
+            pub fn panic(msg: &str) {
+                unsafe { __panic(msg.as_ptr() as _, msg.len()) };
+            }
         };
 
         let library_file = NamedTempFile::new()?;
@@ -106,7 +239,15 @@ pub mod test_runner {
             async function main() {
                 const assert = require("assert");
                 const api = new Api();
-                await api.fetch(#_(#(library_file.as_ref().to_str().unwrap())));
+                await api.fetch(#_(#(library_file.as_ref().to_str().unwrap()).multivalue.wasm), {
+                    env: {
+                        __panic: (ptr, len) => {
+                            const buf = new Uint8Array(api.instance.exports.memory.buffer, ptr, len);
+                            const decoder = new TextDecoder();
+                            throw decoder.decode(buf);
+                        }
+                    }
+                });
                 #js
             }
             main();
@@ -116,6 +257,9 @@ pub mod test_runner {
         rust_file.write_all(library.as_bytes())?;
         let bin = bin_tokens.to_file_string()?;
         js_file.write_all(bin.as_bytes())?;
+
+        let wasm_multi_value = WasmMultiValueShim::generate(
+            library_file.as_ref().to_str().unwrap(), iface);
 
         let runner_tokens: rust::Tokens = quote! {
             fn main() {
@@ -134,6 +278,7 @@ pub mod test_runner {
                     .unwrap()
                     .success();
                 assert!(ret);
+                #wasm_multi_value
                 let ret = Command::new("node")
                     .arg(#(quoted(js_file.as_ref().to_str().unwrap())))
                     .status()
