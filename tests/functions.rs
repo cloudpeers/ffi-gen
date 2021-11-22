@@ -120,8 +120,8 @@ compile_pass! {
         let s = unsafe { String::from_raw_parts(ret.ptr as _, ret.len as _, ret.cap as _) };
         assert_eq!(s.as_str(), "hello world");
     ),
-    ( assert(api.make_string() == "hello world") ),
-    ( assert.equal(api.make_string(), "hello world") ),
+    ( assert(api.make_string() == "hello world"); ),
+    ( assert.equal(api.make_string(), "hello world"); ),
 }
 
 compile_pass! {
@@ -139,6 +139,6 @@ compile_pass! {
         let s2 = unsafe { std::str::from_utf8_unchecked(slice) };
         assert_eq!(s, s2);
     ),
-    ( ),
-    ( ),
+    ( assert(api.as_str("hello world") == "hello world"); ),
+    ( assert.equal(api.as_str("hello world"), "hello world"); ),
 }

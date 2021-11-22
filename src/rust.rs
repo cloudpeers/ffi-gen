@@ -133,7 +133,7 @@ impl RustGenerator {
                     }
                 },
                 AbiType::String => quote! {
-                    use core::mem::ManuallyDrop;
+                    use std::mem::ManuallyDrop;
                     let ret = ManuallyDrop::new(ret);
                     #(self.generate_alloc()) {
                         ptr: ret.as_ptr() as _,

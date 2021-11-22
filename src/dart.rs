@@ -23,16 +23,14 @@ impl DartGenerator {
             import "dart:typed_data";
 
             class _Slice extends ffi.Struct {
-                @ffi.IntPtr()
-                external int ptr;
+                external ffi.Pointer<ffi.Uint8> ptr;
 
                 @ffi.IntPtr()
                 external int len;
             }
 
             class _Alloc extends ffi.Struct {
-                @ffi.IntPtr()
-                external int ptr;
+                external ffi.Pointer<ffi.Uint8> ptr;
 
                 @ffi.IntPtr()
                 external int len;
@@ -119,8 +117,9 @@ impl DartGenerator {
                 #(for (name, ty) in &func.args => #(self.generate_lower(name, ty)))
                 final ret = #(format!("_{}", &func.name))(
                     #(for (name, ty) in &func.args => #(self.generate_lower_args(name, ty))));
-                #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(name, ty)))
                 #(self.generate_lift(func.ret.as_ref()))
+                #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(name, ty)))
+                #(self.generate_return_stmt(func.ret.as_ref()))
             }
 
             late final #(format!("_{}Ptr", &func.name)) = _lookup<
@@ -138,7 +137,8 @@ impl DartGenerator {
     fn generate_arg(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type(*ty)) #name,),
-            AbiType::RefStr => quote!(String #name,),
+            AbiType::RefStr
+            | AbiType::String => quote!(String #name,),
             arg => todo!("arg {:?}", arg),
         }
     }
@@ -147,6 +147,7 @@ impl DartGenerator {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type_native(*ty)),),
             AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr,),
+            AbiType::String => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr, ffi.IntPtr),
             arg => todo!("arg {:?}", arg),
         }
     }
@@ -155,6 +156,7 @@ impl DartGenerator {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type_wrapped(*ty)),),
             AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, int,),
+            AbiType::String => quote!(ffi.Pointer<ffi.Uint8>, int, int,),
             arg => todo!("arg {:?}", arg),
         }
     }
@@ -163,7 +165,8 @@ impl DartGenerator {
         match ty {
             AbiType::Prim(PrimType::Bool) => quote!(final int #(name)_int = #name ? 1 : 0;),
             AbiType::Prim(_) => quote!(),
-            AbiType::RefStr => quote! {
+            AbiType::RefStr
+            | AbiType::String => quote! {
                 final #(name)_utf8 = utf8.encode(#(name));
                 final int #(name)_len = #(name)_utf8.length;
                 final ffi.Pointer<ffi.Uint8> #(name)_ptr = this.allocate(#(name)_len, 1);
@@ -179,6 +182,7 @@ impl DartGenerator {
             AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
             AbiType::Prim(_) => quote!(#(name)),
             AbiType::RefStr => quote!(#(name)_ptr, #(name)_len,),
+            AbiType::String => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
             arg => todo!("lower arg {:?}", arg),
         }
     }
@@ -187,6 +191,7 @@ impl DartGenerator {
         match ty {
             AbiType::Prim(_) => quote!(),
             AbiType::RefStr => quote!(this.deallocate(#(name)_ptr, #(name)_len, 1);),
+            AbiType::String => quote!(),
             arg => todo!("lower arg {:?}", arg),
         }
     }
@@ -194,9 +199,30 @@ impl DartGenerator {
     fn generate_lift(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(PrimType::Bool) => quote!(return ret > 0;),
-                AbiType::Prim(_) => quote!(return ret;),
+                AbiType::Prim(PrimType::Bool) => quote!(final ret_bool = ret > 0;),
+                AbiType::Prim(_) => quote!(),
+                AbiType::RefStr => quote! {
+                    final ret_str = utf8.decode(ret.ptr.asTypedList(ret.len));
+                },
+                AbiType::String => quote! {
+                    final ret_str = utf8.decode(ret.ptr.asTypedList(ret.len));
+                    this.deallocate(ret.ptr, ret.cap, 1);
+                },
                 arg => todo!("lift arg {:?}", arg),
+            }
+        } else {
+            quote!()
+        }
+    }
+
+    fn generate_return_stmt(&self, ret: Option<&AbiType>) -> dart::Tokens {
+        if let Some(ret) = ret {
+            match ret {
+                AbiType::Prim(PrimType::Bool) => quote!(return ret_bool;),
+                AbiType::Prim(_) => quote!(return ret;),
+                AbiType::RefStr
+                | AbiType::String => quote!(return ret_str;),
+                ret => todo!("return {:?}", ret),
             }
         } else {
             quote!()
@@ -207,6 +233,8 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type(*ty),
+                AbiType::RefStr
+                | AbiType::String => quote!(String),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
@@ -218,6 +246,8 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
+                AbiType::RefStr => quote!(_Slice),
+                AbiType::String => quote!(_Alloc),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
@@ -229,6 +259,8 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
+                AbiType::RefStr => quote!(_Slice),
+                AbiType::String => quote!(_Alloc),
                 ret => todo!("ret {:?}", ret),
             }
         } else {
