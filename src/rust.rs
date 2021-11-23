@@ -79,17 +79,47 @@ impl RustGenerator {
     fn generate_function(&mut self, func: AbiFunction) -> rust::Tokens {
         quote! {
             #[no_mangle]
-            pub extern "C" fn #(format!("__{}", &func.name))(
+            pub extern "C" fn #(self.generate_func_name(&func))(
+                #(self.generate_self(&func))
                 #(for (name, ty) in &func.args => #(self.generate_arg(name, ty)))
             ) #(self.generate_return(func.ret.as_ref()))
             {
                 panic_abort(move || {
                     #(for (name, ty) in &func.args => #(self.generate_lift(name, ty)))
-                    let ret = #(&func.name)(#(for (name, _) in &func.args => #name,));
+                    let ret = #(self.generate_invoke(&func))(#(for (name, _) in &func.args => #name,));
                     #(self.generate_lower(func.ret.as_ref()))
                 })
             }
         }
+    }
+
+    fn generate_func_name(&self, func: &AbiFunction) -> String {
+        if let Some(object) = func.object.as_ref() {
+            format!("__{}_{}", object, &func.name)
+        } else {
+            format!("__{}", &func.name)
+        }
+    }
+
+    fn generate_invoke(&self, func: &AbiFunction) -> rust::Tokens {
+        if let Some(object) = func.object.as_ref() {
+            if func.is_static {
+                quote!(#(object)::#(&func.name))
+            } else {
+                quote!(__self.#(&func.name))
+            }
+        } else {
+            quote!(#(&func.name))
+        }
+    }
+
+    fn generate_self(&self, func: &AbiFunction) -> rust::Tokens {
+        if let Some(object) = func.object.as_ref() {
+            if !func.is_static {
+                return quote!(__self: &#object,);
+            }
+        }
+        quote!()
     }
 
     fn generate_destructor(&self, boxed: &str) -> rust::Tokens {
