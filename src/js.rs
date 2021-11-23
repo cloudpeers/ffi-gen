@@ -92,7 +92,7 @@ impl JsGenerator {
                         throw new Error("can't drop moved value");
                     }
                     this.dropped = true;
-                    this.api.instance.exports[this.drop_symbol](this.ptr);
+                    this.api.instance.exports[this.drop_symbol](0, this.ptr);
                 }
             }
 
