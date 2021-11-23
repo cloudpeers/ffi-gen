@@ -36,15 +36,19 @@ compile_pass! {
     (
         let boxed = __make_box(42);
         assert_eq!(do_something(&boxed), 42);
-        drop_box_CustomType(boxed);
+        drop_box_CustomType(core::ptr::null(), boxed);
         assert!(was_dropped());
     ),
     (
         final boxed = api.make_box(42);
         assert(api.do_something(boxed) == 42);
-        boxed.drop();
-        assert(api.was_dropped());
-        //while (!api.was_dropped()) {}
+        //boxed.drop();
+        //assert(api.was_dropped());
+        final largeList = [];
+        while (!api.was_dropped()) {
+            //sleep(Duration(milliseconds: 10));
+            largeList.add(99);
+        }
     ),
     (
         const boxed = api.make_box(42);

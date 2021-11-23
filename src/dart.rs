@@ -43,21 +43,41 @@ impl DartGenerator {
                 external int cap;
             }
 
+            ffi.Pointer<ffi.Void> _registerFinalizer(Box boxed) {
+                final dart = ffi.DynamicLibrary.executable();
+                final registerPtr = dart.lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(
+                    ffi.Handle, ffi.Pointer<ffi.Void>, ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
+                final register = registerPtr
+                    .asFunction<ffi.Pointer<ffi.Void> Function(
+                        Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
+                return register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+            }
+
+            void _unregisterFinalizer(Box boxed) {
+                final dart = ffi.DynamicLibrary.executable();
+                final unregisterPtr = dart.lookup<ffi.NativeFunction<ffi.Void Function(
+                    ffi.Pointer<ffi.Void>, ffi.Handle)>>("Dart_DeleteFinalizableHandle");
+                final unregister = unregisterPtr
+                    .asFunction<void Function(ffi.Pointer<ffi.Void>, Box)>();
+                unregister(boxed._finalizer, boxed);
+            }
+
             class Box {
                 final Api _api;
                 final ffi.Pointer<ffi.Void> _ptr;
                 final String _drop_symbol;
                 bool _dropped;
                 bool _moved;
+                ffi.Pointer<ffi.Void> _finalizer = ffi.Pointer.fromAddress(0);
 
                 Box(this._api, this._ptr, this._drop_symbol) : _dropped = false, _moved = false;
 
                 late final _dropPtr = this._api._lookup<
                     ffi.NativeFunction<
-                        ffi.Void Function(ffi.Pointer<ffi.Void>)>>(this._drop_symbol);
+                        ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>>(this._drop_symbol);
 
                 late final _drop = _dropPtr.asFunction<
-                    void Function(ffi.Pointer<ffi.Void>)>();
+                    void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>();
 
                 ffi.Pointer<ffi.Void> borrow() {
                     if (this._dropped) {
@@ -77,6 +97,7 @@ impl DartGenerator {
                         throw new StateError("can't move value twice");
                     }
                     this._moved = true;
+                    _unregisterFinalizer(this);
                     return this._ptr;
                 }
 
@@ -88,7 +109,8 @@ impl DartGenerator {
                         throw new StateError("can't drop moved value");
                     }
                     this._dropped = true;
-                    this._drop(this._ptr);
+                    _unregisterFinalizer(this);
+                    this._drop(ffi.Pointer.fromAddress(0), this._ptr);
                 }
             }
 
@@ -306,7 +328,10 @@ impl DartGenerator {
                 }
                 AbiType::Box(ident) => {
                     let destructor = format!("drop_box_{}", ident);
-                    quote!(final ret_box = Box(this, ret, #_(#destructor));)
+                    quote! {
+                        final ret_box = new Box(this, ret, #_(#destructor));
+                        ret_box._finalizer = _registerFinalizer(ret_box);
+                    }
                 }
                 AbiType::Ref(_) => unreachable!(),
             }
@@ -502,8 +527,9 @@ pub mod test_runner {
                 assert!(ret);
                 let ret = Command::new("dart")
                     .env("LD_LIBRARY_PATH", #(quoted(library_dir.as_ref().to_str().unwrap())))
-                    .arg("run")
                     .arg("--enable-asserts")
+                    //.arg("--observe")
+                    //.arg("--write-service-info=service.json")
                     .arg(#(quoted(dart_file.as_ref().to_str().unwrap())))
                     .status()
                     .unwrap()

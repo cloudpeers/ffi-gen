@@ -93,10 +93,12 @@ impl RustGenerator {
     }
 
     fn generate_destructor(&self, boxed: &str) -> rust::Tokens {
+        // make destructor compatible with dart by adding an unused `isolate_callback_data` as
+        // the first argument.
         let name = format!("drop_box_{}", boxed);
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(boxed: Box<#boxed>) {
+            pub extern "C" fn #name(_: *const core::ffi::c_void, boxed: Box<#boxed>) {
                 panic_abort(move || {
                     drop(boxed);
                 });
