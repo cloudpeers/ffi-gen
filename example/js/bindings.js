@@ -36,13 +36,63 @@ function fetchAndInstantiate(url, imports) {
     .then((result) => result.instance);
 }
 
+class Box {
+  constructor(api, ptr, drop_symbol) {
+    this.api = api;
+    this.ptr = ptr;
+    this.drop_symbol = drop_symbol;
+    this.dropped = false;
+    this.moved = false;
+  }
+
+  borrow() {
+    if (this.dropped) {
+      throw new Error("use after free");
+    }
+    if (this.moved) {
+      throw new Error("use after move");
+    }
+    return this.ptr;
+  }
+
+  move() {
+    if (this.dropped) {
+      throw new Error("use after free");
+    }
+    if (this.moved) {
+      throw new Error("can't move value twice");
+    }
+    this.moved = true;
+    return this.ptr;
+  }
+
+  drop() {
+    if (this.dropped) {
+      throw new Error("double free");
+    }
+    if (this.moved) {
+      throw new Error("can't drop moved value");
+    }
+    this.dropped = true;
+    this.api.instance.exports[this.drop_symbol](this.ptr);
+  }
+}
+
 class Api {
   async fetch(url, imports) {
     this.instance = await fetchAndInstantiate(url, imports);
   }
 
+  allocate(size, align) {
+    return this.instance.exports.allocate(size, align);
+  }
+
+  deallocate(ptr, size, align) {
+    this.instance.exports.deallocate(ptr, size, align);
+  }
+
   hello_world() {
-    return this.instance.exports.__hello_world();
+    const ret = this.instance.exports.__hello_world();
   }
 }
 

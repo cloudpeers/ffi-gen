@@ -43,6 +43,55 @@ impl DartGenerator {
                 external int cap;
             }
 
+            class Box {
+                final Api _api;
+                final ffi.Pointer<ffi.Void> _ptr;
+                final String _drop_symbol;
+                bool _dropped;
+                bool _moved;
+
+                Box(this._api, this._ptr, this._drop_symbol) : _dropped = false, _moved = false;
+
+                late final _dropPtr = this._api._lookup<
+                    ffi.NativeFunction<
+                        ffi.Void Function(ffi.Pointer<ffi.Void>)>>(this._drop_symbol);
+
+                late final _drop = _dropPtr.asFunction<
+                    void Function(ffi.Pointer<ffi.Void>)>();
+
+                ffi.Pointer<ffi.Void> borrow() {
+                    if (this._dropped) {
+                        throw new StateError("use after free");
+                    }
+                    if (this._moved) {
+                        throw new StateError("use after move");
+                    }
+                    return this._ptr;
+                }
+
+                ffi.Pointer<ffi.Void> move() {
+                    if (this._dropped) {
+                        throw new StateError("use after free");
+                    }
+                    if (this._moved) {
+                        throw new StateError("can't move value twice");
+                    }
+                    this._moved = true;
+                    return this._ptr;
+                }
+
+                void drop() {
+                    if (this._dropped) {
+                        throw new StateError("double free");
+                    }
+                    if (this._moved) {
+                        throw new StateError("can't drop moved value");
+                    }
+                    this._dropped = true;
+                    this._drop(this._ptr);
+                }
+            }
+
             class Api {
                 #(static_literal("///")) Holds the symbol lookup function.
                 final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
@@ -145,7 +194,7 @@ impl DartGenerator {
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_prim_type(*ty))> #name,)
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(Box #name,),
         }
     }
 
@@ -162,7 +211,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr, ffi.IntPtr,)
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(ffi.Pointer<ffi.Void>,),
         }
     }
 
@@ -177,7 +226,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,)
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(ffi.Pointer<ffi.Void>,),
         }
     }
 
@@ -202,7 +251,8 @@ impl DartGenerator {
                     #(name)_view.setAll(0, #(name));
                 }
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) => quote!(final #(name)_ptr = #(name).move();),
+            AbiType::Ref(_) => quote!(final #(name)_ptr = #(name).borrow();),
         }
     }
 
@@ -212,7 +262,7 @@ impl DartGenerator {
             AbiType::Prim(_) => quote!(#(name)),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
         }
     }
 
@@ -223,7 +273,7 @@ impl DartGenerator {
                 quote!(this.deallocate(#(name)_ptr, #(name)_len, 1);)
             }
             AbiType::String | AbiType::Vec(_) => quote!(),
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(),
         }
     }
 
@@ -254,7 +304,11 @@ impl DartGenerator {
                         }
                     }
                 }
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(ident) => {
+                    let destructor = format!("drop_box_{}", ident);
+                    quote!(final ret_box = Box(this, ret, #_(#destructor));)
+                }
+                AbiType::Ref(_) => unreachable!(),
             }
         } else {
             quote!()
@@ -268,7 +322,7 @@ impl DartGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(_) | AbiType::Ref(_) => quote!(return ret_box;),
             }
         } else {
             quote!()
@@ -283,7 +337,8 @@ impl DartGenerator {
                 AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                     quote!(List<#(self.generate_prim_type(*ty))>)
                 }
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(_) => quote!(Box),
+                AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
             }
         } else {
             quote!(void)
@@ -296,7 +351,8 @@ impl DartGenerator {
                 AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(_) => quote!(ffi.Pointer<ffi.Void>),
+                AbiType::Ref(_) => unreachable!(),
             }
         } else {
             quote!(ffi.Void)
@@ -309,7 +365,8 @@ impl DartGenerator {
                 AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(_) => quote!(ffi.Pointer<ffi.Void>),
+                AbiType::Ref(_) => unreachable!(),
             }
         } else {
             quote!(void)
@@ -389,7 +446,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, dart: dart::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let rust_gen = RustGenerator::new(Abi::native());
+        let mut rust_gen = RustGenerator::new(Abi::native());
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut dart_file = NamedTempFile::new()?;
         let dart_gen = DartGenerator::new("compile_pass".to_string());

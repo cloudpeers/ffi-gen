@@ -54,6 +54,48 @@ impl JsGenerator {
                         .then(result => result.instance);
             }
 
+            class Box {
+                constructor(api, ptr, drop_symbol) {
+                    this.api = api;
+                    this.ptr = ptr;
+                    this.drop_symbol = drop_symbol;
+                    this.dropped = false;
+                    this.moved = false;
+                }
+
+                borrow() {
+                    if (this.dropped) {
+                        throw new Error("use after free");
+                    }
+                    if (this.moved) {
+                        throw new Error("use after move");
+                    }
+                    return this.ptr;
+                }
+
+                move() {
+                    if (this.dropped) {
+                        throw new Error("use after free");
+                    }
+                    if (this.moved) {
+                        throw new Error("can't move value twice");
+                    }
+                    this.moved = true;
+                    return this.ptr;
+                }
+
+                drop() {
+                    if (this.dropped) {
+                        throw new Error("double free");
+                    }
+                    if (this.moved) {
+                        throw new Error("can't drop moved value");
+                    }
+                    this.dropped = true;
+                    this.api.instance.exports[this.drop_symbol](this.ptr);
+                }
+            }
+
             class Api {
                 async fetch(url, imports) {
                     this.instance = await fetchAndInstantiate(url, imports);
@@ -107,7 +149,8 @@ impl JsGenerator {
                     #(name)_buf.set(#name, 0);
                 }
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) => quote!(const #(name)_ptr = #(name).move();),
+            AbiType::Ref(_) => quote!(const #(name)_ptr = #(name).borrow();),
         }
     }
 
@@ -116,7 +159,7 @@ impl JsGenerator {
             AbiType::Prim(_) => quote!(#name,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
         }
     }
 
@@ -136,7 +179,7 @@ impl JsGenerator {
                     }
                 }
             }
-            AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+            AbiType::Box(_) | AbiType::Ref(_) => quote!(),
         }
     }
 
@@ -176,7 +219,11 @@ impl JsGenerator {
                         }
                     }
                 }
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(ident) => {
+                    let destructor = format!("drop_box_{}", ident);
+                    quote!(const ret_box = new Box(this, ret, #_(#destructor));)
+                }
+                AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
             }
         } else {
             quote!()
@@ -189,7 +236,7 @@ impl JsGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
-                AbiType::Box(_) | AbiType::Ref(_) => todo!(),
+                AbiType::Box(_) | AbiType::Ref(_) => quote!(return ret_box;),
             }
         } else {
             quote!()
@@ -278,7 +325,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let rust_gen = RustGenerator::new(Abi::Wasm(32));
+        let mut rust_gen = RustGenerator::new(Abi::Wasm(32));
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::new();

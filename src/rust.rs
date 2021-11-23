@@ -1,16 +1,21 @@
 use crate::{Abi, AbiFunction, AbiType, Interface, PrimType};
 use genco::prelude::*;
+use std::collections::HashSet;
 
 pub struct RustGenerator {
     abi: Abi,
+    destructors: HashSet<String>,
 }
 
 impl RustGenerator {
     pub fn new(abi: Abi) -> Self {
-        Self { abi }
+        Self {
+            abi,
+            destructors: Default::default(),
+        }
     }
 
-    pub fn generate(&self, iface: Interface) -> rust::Tokens {
+    pub fn generate(&mut self, iface: Interface) -> rust::Tokens {
         quote! {
             #[repr(C)]
             pub struct Slice32 {
@@ -66,10 +71,12 @@ impl RustGenerator {
             }
 
             #(for func in iface.into_functions() => #(self.generate_function(func)))
+
+            #(for dest in &self.destructors => #(self.generate_destructor(dest)))
         }
     }
 
-    fn generate_function(&self, func: AbiFunction) -> rust::Tokens {
+    fn generate_function(&mut self, func: AbiFunction) -> rust::Tokens {
         quote! {
             #[no_mangle]
             pub extern "C" fn #(format!("__{}", &func.name))(
@@ -81,6 +88,18 @@ impl RustGenerator {
                     let ret = #(&func.name)(#(for (name, _) in &func.args => #name,));
                     #(self.generate_lower(func.ret.as_ref()))
                 })
+            }
+        }
+    }
+
+    fn generate_destructor(&self, boxed: &str) -> rust::Tokens {
+        let name = format!("drop_box_{}", boxed);
+        quote! {
+            #[no_mangle]
+            pub extern "C" fn #name(boxed: Box<#boxed>) {
+                panic_abort(move || {
+                    drop(boxed);
+                });
             }
         }
     }
@@ -135,13 +154,16 @@ impl RustGenerator {
         }
     }
 
-    fn generate_return(&self, ret: Option<&AbiType>) -> rust::Tokens {
+    fn generate_return(&mut self, ret: Option<&AbiType>) -> rust::Tokens {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => quote!(-> #(self.generate_prim_type(*ty))),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(-> #(self.generate_slice())),
                 AbiType::String | AbiType::Vec(_) => quote!(-> #(self.generate_alloc())),
-                AbiType::Box(ident) => quote!(-> Box<#ident>),
+                AbiType::Box(ident) => {
+                    self.destructors.insert(ident.clone());
+                    quote!(-> Box<#ident>)
+                }
                 AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
             }
         } else {
@@ -237,7 +259,7 @@ pub mod test_runner {
 
     pub fn compile_pass(iface: &str, api: rust::Tokens, test: rust::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
-        let gen = RustGenerator::new(Abi::native());
+        let mut gen = RustGenerator::new(Abi::native());
         let gen_tokens = gen.generate(iface);
         let tokens = quote! {
             #gen_tokens

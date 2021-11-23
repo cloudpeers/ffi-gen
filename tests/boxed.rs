@@ -36,17 +36,21 @@ compile_pass! {
     (
         let boxed = __make_box(42);
         assert_eq!(do_something(&boxed), 42);
-        drop(boxed);
+        drop_box_CustomType(boxed);
         assert!(was_dropped());
     ),
     (
         final boxed = api.make_box(42);
         assert(api.do_something(boxed) == 42);
-        while (!api.was_dropped()) {}
+        boxed.drop();
+        assert(api.was_dropped());
+        //while (!api.was_dropped()) {}
     ),
     (
         const boxed = api.make_box(42);
         assert.equal(api.do_something(boxed), 42);
-        while (!api.was_dropped()) {}
+        boxed.drop();
+        assert.equal(api.was_dropped(), true);
+        //while (!api.was_dropped()) {}
     ),
 }

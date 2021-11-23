@@ -24,6 +24,58 @@ class _Alloc extends ffi.Struct {
   external int cap;
 }
 
+class Box {
+  final Api _api;
+  final ffi.Pointer<ffi.Void> _ptr;
+  final String _drop_symbol;
+  bool _dropped;
+  bool _moved;
+
+  Box(this._api, this._ptr, this._drop_symbol)
+      : _dropped = false,
+        _moved = false;
+
+  late final _dropPtr = this
+      ._api
+      ._lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+          this._drop_symbol);
+
+  late final _drop =
+      _dropPtr.asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  ffi.Pointer<ffi.Void> borrow() {
+    if (this._dropped) {
+      throw new StateError("use after free");
+    }
+    if (this._moved) {
+      throw new StateError("use after move");
+    }
+    return this._ptr;
+  }
+
+  ffi.Pointer<ffi.Void> move() {
+    if (this._dropped) {
+      throw new StateError("use after free");
+    }
+    if (this._moved) {
+      throw new StateError("can't move value twice");
+    }
+    this._moved = true;
+    return this._ptr;
+  }
+
+  void drop() {
+    if (this._dropped) {
+      throw new StateError("double free");
+    }
+    if (this._moved) {
+      throw new StateError("can't drop moved value");
+    }
+    this._dropped = true;
+    this._drop(this._ptr);
+  }
+}
+
 class Api {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
