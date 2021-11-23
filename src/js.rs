@@ -34,7 +34,6 @@ impl JsGenerator {
 
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
-
             // gets the wasm at a url and instantiates it.
             // checks if streaming instantiation is available and uses that
             function fetchAndInstantiate(url, imports) {
@@ -54,13 +53,15 @@ impl JsGenerator {
                         .then(result => result.instance);
             }
 
+            const dropRegistry = new FinalizationRegistry(drop => drop());
+
             class Box {
-                constructor(api, ptr, drop_symbol) {
-                    this.api = api;
+                constructor(ptr, destructor) {
                     this.ptr = ptr;
-                    this.drop_symbol = drop_symbol;
                     this.dropped = false;
                     this.moved = false;
+                    dropRegistry.register(this, destructor);
+                    this.destructor = destructor;
                 }
 
                 borrow() {
@@ -81,6 +82,7 @@ impl JsGenerator {
                         throw new Error("can't move value twice");
                     }
                     this.moved = true;
+                    dropRegistry.unregister(this);
                     return this.ptr;
                 }
 
@@ -92,7 +94,8 @@ impl JsGenerator {
                         throw new Error("can't drop moved value");
                     }
                     this.dropped = true;
-                    this.api.instance.exports[this.drop_symbol](0, this.ptr);
+                    dropRegistry.unregister(this);
+                    this.destructor();
                 }
             }
 
@@ -107,6 +110,10 @@ impl JsGenerator {
 
                 deallocate(ptr, size, align) {
                     this.instance.exports.deallocate(ptr, size, align);
+                }
+
+                drop(symbol, ptr) {
+                    this.instance.exports[symbol](0, ptr);
                 }
 
                 #(for func in iface.into_functions() => #(self.generate_function(func)))
@@ -221,7 +228,10 @@ impl JsGenerator {
                 }
                 AbiType::Box(ident) => {
                     let destructor = format!("drop_box_{}", ident);
-                    quote!(const ret_box = new Box(this, ret, #_(#destructor));)
+                    quote! {
+                        const destructor = () => { this.drop(#_(#destructor), ret) };
+                        const ret_box = new Box(ret, destructor);
+                    }
                 }
                 AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
             }
@@ -392,6 +402,7 @@ pub mod test_runner {
                 assert!(ret);
                 #wasm_multi_value
                 let ret = Command::new("node")
+                    .arg("--expose-gc")
                     .arg(#(quoted(js_file.as_ref().to_str().unwrap())))
                     .status()
                     .unwrap()

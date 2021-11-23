@@ -51,10 +51,17 @@ compile_pass! {
         }
     ),
     (
-        const boxed = api.make_box(42);
-        assert.equal(api.do_something(boxed), 42);
-        boxed.drop();
-        assert.equal(api.was_dropped(), true);
-        //while (!api.was_dropped()) {}
+        const f = () => {
+            let boxed = api.make_box(42);
+            assert.equal(api.do_something(boxed), 42);
+        };
+        f();
+        const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+        //boxed.drop();
+        //assert.equal(api.was_dropped(), true);
+        while (!api.was_dropped()) {
+            await delay(1000);
+            global.gc();
+        }
     ),
 }
