@@ -1,4 +1,4 @@
-use crate::{Abi, AbiFunction, AbiType, Interface, PrimType};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, Interface, PrimType};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -116,34 +116,77 @@ impl JsGenerator {
                     this.instance.exports[symbol](0, ptr);
                 }
 
-                #(for func in iface.into_functions() => #(self.generate_function(func)))
+                #(for func in iface.functions() => #(self.generate_function(func)))
             }
+
+            #(for obj in iface.objects() => #(self.generate_object(obj)))
 
             module.exports = {
                 Api: Api,
+                #(for obj in iface.objects() => #(&obj.name): #(&obj.name),)
+            }
+        }
+    }
+
+    fn generate_object(&self, obj: AbiObject) -> js::Tokens {
+        quote! {
+            class #(&obj.name) {
+                constructor(api, box) {
+                    this.api = api;
+                    this.box = box;
+                }
+
+                #(for method in obj.methods => #(self.generate_function(method)))
+
+                drop() {
+                    this.box.drop();
+                }
             }
         }
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
+        let api_arg = if func.is_static {
+            quote!(api,)
+        } else {
+            quote!()
+        };
+        let api = if func.object.is_some() && func.is_static {
+            quote!(api)
+        } else if func.object.is_some() {
+            quote!(this.api)
+        } else {
+            quote!(this)
+        };
+        let self_arg = if func.needs_self() {
+            quote!(this.box.borrow(),)
+        } else {
+            quote!()
+        };
+        let static_ = if func.is_static {
+            quote!(static)
+        } else {
+            quote!()
+        };
         quote! {
-            #(&func.name)(#(for (name, _) in &func.args => #name,)) {
-                #(for (name, ty) in &func.args => #(self.generate_lower(name, ty)))
-                const ret = this.instance.exports.#(format!("__{}", &func.name))(
+            #static_ #(&func.name)(#api_arg #(for (name, _) in &func.args => #name,)) {
+                #(for (name, ty) in &func.args => #(self.generate_lower(&api, name, ty)))
+                const ret = #(&api).instance.exports.#(format!("__{}", func.fqn()))(
+                    #self_arg
                     #(for (name, ty) in &func.args => #(self.generate_arg(name, ty))));
-                #(self.generate_lift(func.ret.as_ref()))
+                #(self.generate_lift(&api, func.ret.as_ref()))
                 #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(name, ty)))
                 #(self.generate_return_stmt(func.ret.as_ref()))
             }
         }
     }
 
-    fn generate_lower(&self, name: &str, ty: &AbiType) -> js::Tokens {
+    fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
             AbiType::Prim(_) => quote!(),
             AbiType::RefStr | AbiType::String => quote! {
-                const #(name)_ptr = this.allocate(#name.length, 1);
-                const #(name)_buf = new Uint8Array(this.instance.exports.memory.buffer, #(name)_ptr, #name.length);
+                const #(name)_ptr = #api.allocate(#name.length, 1);
+                const #(name)_buf = new Uint8Array(#api.instance.exports.memory.buffer, #(name)_ptr, #name.length);
                 const #(name)_encoder = new TextEncoder();
                 #(name)_encoder.encodeInto(#name, #(name)_buf);
             },
@@ -152,7 +195,7 @@ impl JsGenerator {
                 quote! {
                     const #(name)_ptr = this.allocate(#name.length * #size, #align);
                     const #(name)_buf = new #(self.generate_array(*ty))(
-                        this.instance.exports.memory.buffer, #(name)_ptr, #name.length);
+                        #api.instance.exports.memory.buffer, #(name)_ptr, #name.length);
                     #(name)_buf.set(#name, 0);
                 }
             }
@@ -193,28 +236,28 @@ impl JsGenerator {
         }
     }
 
-    fn generate_lift(&self, ret: Option<&AbiType>) -> js::Tokens {
+    fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(_) => quote!(),
                 AbiType::RefStr => quote! {
-                    const buf = new Uint8Array(this.instance.exports.memory.buffer, ret[0], ret[1]);
+                    const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
                     const decoder = new TextDecoder();
                     const ret_str = decoder.decode(buf);
                 },
                 AbiType::String => quote! {
-                    const buf = new Uint8Array(this.instance.exports.memory.buffer, ret[0], ret[1]);
+                    const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
                     const decoder = new TextDecoder();
                     const ret_str = decoder.decode(buf);
                     if (ret[2] > 0) {
-                        this.deallocate(ret[0], ret[2], 1);
+                        #api.deallocate(ret[0], ret[2], 1);
                     }
                 },
                 AbiType::RefSlice(ty) => {
                     let (size, _align) = self.abi.layout(*ty);
                     quote! {
                         const buf = new #(self.generate_array(*ty))(
-                            this.instance.exports.memory.buffer, ret[0], ret[1] * #size);
+                            #api.instance.exports.memory.buffer, ret[0], ret[1] * #size);
                         const ret_arr = Array.from(buf);
                     }
                 }
@@ -222,22 +265,29 @@ impl JsGenerator {
                     let (size, align) = self.abi.layout(*ty);
                     quote! {
                         const buf = new #(self.generate_array(*ty))(
-                            this.instance.exports.memory.buffer, ret[0], ret[1]);
+                            #api.instance.exports.memory.buffer, ret[0], ret[1]);
                         const ret_arr = Array.from(buf);
                         if (ret[2] > 0) {
-                            this.deallocate(ret[0], ret[2] * #size, #align);
+                            #api.deallocate(ret[0], ret[2] * #size, #align);
                         }
                     }
                 }
                 AbiType::Box(ident) => {
                     let destructor = format!("drop_box_{}", ident);
                     quote! {
-                        const destructor = () => { this.drop(#_(#destructor), ret) };
+                        const destructor = () => { #api.drop(#_(#destructor), ret) };
                         const ret_box = new Box(ret, destructor);
                     }
                 }
                 AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
-                AbiType::Object(_) => todo!(),
+                AbiType::Object(ident) => {
+                    let destructor = format!("drop_box_{}", ident);
+                    quote! {
+                        const destructor = () => { #api.drop(#_(#destructor), ret) };
+                        const ret_box = new Box(ret, destructor);
+                        const ret_obj = new #ident(#api, ret_box);
+                    }
+                }
             }
         } else {
             quote!()
@@ -251,7 +301,7 @@ impl JsGenerator {
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
                 AbiType::Box(_) | AbiType::Ref(_) => quote!(return ret_box;),
-                AbiType::Object(_) => todo!(),
+                AbiType::Object(_) => quote!(return ret_obj;),
             }
         } else {
             quote!()
@@ -405,6 +455,7 @@ pub mod test_runner {
                     .unwrap()
                     .success();
                 assert!(ret);
+                //println!("{}", #_(#bin));
                 #wasm_multi_value
                 let ret = Command::new("node")
                     .arg("--expose-gc")
