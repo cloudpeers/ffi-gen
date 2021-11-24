@@ -36,13 +36,15 @@ function fetchAndInstantiate(url, imports) {
     .then((result) => result.instance);
 }
 
+const dropRegistry = new FinalizationRegistry((drop) => drop());
+
 class Box {
-  constructor(api, ptr, drop_symbol) {
-    this.api = api;
+  constructor(ptr, destructor) {
     this.ptr = ptr;
-    this.drop_symbol = drop_symbol;
     this.dropped = false;
     this.moved = false;
+    dropRegistry.register(this, destructor);
+    this.destructor = destructor;
   }
 
   borrow() {
@@ -63,6 +65,7 @@ class Box {
       throw new Error("can't move value twice");
     }
     this.moved = true;
+    dropRegistry.unregister(this);
     return this.ptr;
   }
 
@@ -74,7 +77,8 @@ class Box {
       throw new Error("can't drop moved value");
     }
     this.dropped = true;
-    this.api.instance.exports[this.drop_symbol](0, this.ptr);
+    dropRegistry.unregister(this);
+    this.destructor();
   }
 }
 
@@ -89,6 +93,10 @@ class Api {
 
   deallocate(ptr, size, align) {
     this.instance.exports.deallocate(ptr, size, align);
+  }
+
+  drop(symbol, ptr) {
+    this.instance.exports[symbol](0, ptr);
   }
 
   hello_world() {

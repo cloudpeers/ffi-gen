@@ -144,17 +144,26 @@ class Api {
     }
   }
 
+  ffi.Pointer<T> allocate<T extends ffi.NativeType>(
+      int byteCount, int alignment) {
+    return _allocate(byteCount, alignment).cast();
+  }
+
+  void deallocate<T extends ffi.NativeType>(
+      ffi.Pointer pointer, int byteCount, int alignment) {
+    this._deallocate(pointer.cast(), byteCount, alignment);
+  }
+
+  void hello_world() {
+    final ret = this._hello_world();
+  }
+
   late final _allocatePtr = _lookup<
       ffi.NativeFunction<
           ffi.Pointer<ffi.Uint8> Function(ffi.IntPtr, ffi.IntPtr)>>("allocate");
 
   late final _allocate =
       _allocatePtr.asFunction<ffi.Pointer<ffi.Uint8> Function(int, int)>();
-
-  ffi.Pointer<T> allocate<T extends ffi.NativeType>(
-      int byteCount, int alignment) {
-    return _allocate(byteCount, alignment).cast();
-  }
 
   late final _deallocatePtr = _lookup<
       ffi.NativeFunction<
@@ -163,15 +172,6 @@ class Api {
 
   late final _deallocate =
       _deallocatePtr.asFunction<Function(ffi.Pointer<ffi.Uint8>, int, int)>();
-
-  void deallocate<T extends ffi.NativeType>(
-      ffi.Pointer pointer, int byteCount, int alignment) {
-    this._deallocate(pointer.cast(), byteCount, alignment);
-  }
-
-  void hello_world() {
-    final ret = _hello_world();
-  }
 
   late final _hello_worldPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function()>>("__hello_world");
