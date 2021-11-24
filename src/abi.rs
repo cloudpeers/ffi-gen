@@ -79,6 +79,7 @@ pub enum AbiType {
     Vec(PrimType),
     Box(String),
     Ref(String),
+    Object(String),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -114,9 +115,9 @@ impl Interface {
                         .ty
                         .args
                         .iter()
-                        .map(|(n, ty)| (n.clone(), ty.to_type()))
+                        .map(|(n, ty)| (n.clone(), self.to_type(ty)))
                         .collect(),
-                    ret: method.func.ty.ret.as_ref().map(|ty| ty.to_type()),
+                    ret: method.func.ty.ret.as_ref().map(|ty| self.to_type(ty)),
                 };
                 methods.push(func);
             }
@@ -140,9 +141,9 @@ impl Interface {
                     .ty
                     .args
                     .iter()
-                    .map(|(n, ty)| (n.clone(), ty.to_type()))
+                    .map(|(n, ty)| (n.clone(), self.to_type(ty)))
                     .collect(),
-                ret: func.ty.ret.as_ref().map(|ty| ty.to_type()),
+                ret: func.ty.ret.as_ref().map(|ty| self.to_type(ty)),
             };
             funcs.push(func);
         }
@@ -156,42 +157,41 @@ impl Interface {
         }
         funcs
     }
-}
 
-impl Type {
-    pub fn to_type(&self) -> AbiType {
-        match self {
-            Self::U8 => AbiType::Prim(PrimType::U8),
-            Self::U16 => AbiType::Prim(PrimType::U16),
-            Self::U32 => AbiType::Prim(PrimType::U32),
-            Self::U64 => AbiType::Prim(PrimType::U64),
-            Self::Usize => AbiType::Prim(PrimType::Usize),
-            Self::I8 => AbiType::Prim(PrimType::I8),
-            Self::I16 => AbiType::Prim(PrimType::I16),
-            Self::I32 => AbiType::Prim(PrimType::I32),
-            Self::I64 => AbiType::Prim(PrimType::I64),
-            Self::Isize => AbiType::Prim(PrimType::Isize),
-            Self::Bool => AbiType::Prim(PrimType::Bool),
-            Self::F32 => AbiType::Prim(PrimType::F32),
-            Self::F64 => AbiType::Prim(PrimType::F64),
-            Self::Ref(inner) => match &**inner {
-                Self::String => AbiType::RefStr,
-                Self::Slice(inner) => match inner.to_type() {
+    pub fn to_type(&self, ty: &Type) -> AbiType {
+        match ty {
+            Type::U8 => AbiType::Prim(PrimType::U8),
+            Type::U16 => AbiType::Prim(PrimType::U16),
+            Type::U32 => AbiType::Prim(PrimType::U32),
+            Type::U64 => AbiType::Prim(PrimType::U64),
+            Type::Usize => AbiType::Prim(PrimType::Usize),
+            Type::I8 => AbiType::Prim(PrimType::I8),
+            Type::I16 => AbiType::Prim(PrimType::I16),
+            Type::I32 => AbiType::Prim(PrimType::I32),
+            Type::I64 => AbiType::Prim(PrimType::I64),
+            Type::Isize => AbiType::Prim(PrimType::Isize),
+            Type::Bool => AbiType::Prim(PrimType::Bool),
+            Type::F32 => AbiType::Prim(PrimType::F32),
+            Type::F64 => AbiType::Prim(PrimType::F64),
+            Type::Ref(inner) => match &**inner {
+                Type::String => AbiType::RefStr,
+                Type::Slice(inner) => match self.to_type(inner) {
                     AbiType::Prim(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
-                Self::Ident(ident) => AbiType::Ref(ident.clone()),
+                Type::Ident(ident) => AbiType::Ref(ident.clone()),
                 ty => unimplemented!("&{:?}", ty),
             },
-            Self::String => AbiType::String,
-            Self::Vec(inner) => match inner.to_type() {
+            Type::String => AbiType::String,
+            Type::Vec(inner) => match self.to_type(inner) {
                 AbiType::Prim(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
             },
-            Self::Box(inner) => match &**inner {
-                Self::Ident(ident) => AbiType::Box(ident.clone()),
+            Type::Box(inner) => match &**inner {
+                Type::Ident(ident) => AbiType::Box(ident.clone()),
                 ty => unimplemented!("Box<{:?}>", ty),
             },
+            Type::Ident(ident) if self.is_object(ident) => AbiType::Object(ident.clone()),
             ty => unimplemented!("{:?}", ty),
         }
     }

@@ -2,6 +2,7 @@ use anyhow::Result;
 use pest::iterators::Pair;
 use pest::Parser;
 use pest_derive::Parser;
+use std::collections::HashSet;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -11,6 +12,7 @@ struct GrammarParser;
 pub struct Interface {
     pub functions: Vec<Function>,
     pub objects: Vec<Object>,
+    idents: HashSet<String>,
 }
 
 impl Interface {
@@ -18,12 +20,17 @@ impl Interface {
         let root = GrammarParser::parse(Rule::root, input)?;
         let mut functions = vec![];
         let mut objects = vec![];
+        let mut idents = HashSet::new();
         for pair in root {
             for pair in pair.into_inner() {
                 for pair in pair.into_inner() {
                     match pair.as_rule() {
                         Rule::object => {
                             let obj = Object::parse(pair)?;
+                            if idents.contains(&obj.ident) {
+                                anyhow::bail!("duplicate object identifier");
+                            }
+                            idents.insert(obj.ident.clone());
                             objects.push(obj);
                         }
                         Rule::function => {
@@ -35,7 +42,15 @@ impl Interface {
                 }
             }
         }
-        Ok(Self { functions, objects })
+        Ok(Self {
+            functions,
+            objects,
+            idents,
+        })
+    }
+
+    pub fn is_object(&self, name: &str) -> bool {
+        self.idents.contains(name)
     }
 }
 
@@ -276,7 +291,8 @@ mod tests {
             res,
             Interface {
                 objects: vec![],
-                functions: vec![]
+                functions: vec![],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello fn();")?;
@@ -291,7 +307,8 @@ mod tests {
                         args: vec![],
                         ret: None,
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello fn(a: u8);")?;
@@ -306,7 +323,8 @@ mod tests {
                         args: vec![("a".to_string(), Type::U8)],
                         ret: None,
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello fn() -> u8;")?;
@@ -321,7 +339,8 @@ mod tests {
                         args: vec![],
                         ret: Some(Type::U8),
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello fn(a: &string);")?;
@@ -336,7 +355,8 @@ mod tests {
                         args: vec![("a".to_string(), Type::Ref(Box::new(Type::String)))],
                         ret: None,
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello fn(a: &[u8]) -> Vec<i64>;")?;
@@ -354,7 +374,8 @@ mod tests {
                         )],
                         ret: Some(Type::Vec(Box::new(Type::I64))),
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse("hello async fn();")?;
@@ -369,7 +390,8 @@ mod tests {
                         args: vec![],
                         ret: None,
                     }
-                }]
+                }],
+                idents: Default::default(),
             }
         );
         let res = Interface::parse(
@@ -407,7 +429,8 @@ mod tests {
                             }
                         }
                     ]
-                }]
+                }],
+                idents: vec!["Greeter".to_string()].into_iter().collect(),
             }
         );
         Ok(())
