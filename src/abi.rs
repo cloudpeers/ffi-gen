@@ -38,6 +38,11 @@ impl Abi {
     }
 }
 
+pub struct AbiObject {
+    pub name: String,
+    pub methods: Vec<AbiFunction>,
+}
+
 pub struct AbiFunction {
     pub is_static: bool,
     pub is_async: bool,
@@ -45,6 +50,24 @@ pub struct AbiFunction {
     pub name: String,
     pub args: Vec<(String, AbiType)>,
     pub ret: Option<AbiType>,
+}
+
+impl AbiFunction {
+    pub fn fqn(&self) -> String {
+        if let Some(object) = self.object.as_ref() {
+            format!("{}_{}", object, &self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+
+    pub fn needs_self(&self) -> bool {
+        self.object.is_some() && !self.is_static
+    }
+
+    pub fn self_type(&self) -> AbiType {
+        AbiType::Ref(self.object.clone().unwrap())
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -76,49 +99,67 @@ pub enum PrimType {
 }
 
 impl Interface {
-    pub fn into_functions(self) -> Vec<AbiFunction> {
-        let mut funcs = vec![];
-        for object in self.objects {
-            for method in object.methods {
+    pub fn objects(&self) -> Vec<AbiObject> {
+        let mut objs = vec![];
+        for object in &self.objects {
+            let mut methods = vec![];
+            for method in &object.methods {
                 let func = AbiFunction {
                     is_static: method.is_static,
                     is_async: method.func.ty.is_async,
                     object: Some(object.ident.clone()),
-                    name: method.func.ident,
+                    name: method.func.ident.clone(),
                     args: method
                         .func
                         .ty
                         .args
-                        .into_iter()
-                        .map(|(n, ty)| (n, ty.into_type()))
+                        .iter()
+                        .map(|(n, ty)| (n.clone(), ty.to_type()))
                         .collect(),
-                    ret: method.func.ty.ret.map(|ty| ty.into_type()),
+                    ret: method.func.ty.ret.as_ref().map(|ty| ty.to_type()),
                 };
-                funcs.push(func);
+                methods.push(func);
             }
+            objs.push(AbiObject {
+                name: object.ident.clone(),
+                methods,
+            });
         }
-        for func in self.functions {
+        objs
+    }
+
+    pub fn functions(&self) -> Vec<AbiFunction> {
+        let mut funcs = vec![];
+        for func in &self.functions {
             let func = AbiFunction {
                 is_static: false,
                 is_async: func.ty.is_async,
                 object: None,
-                name: func.ident,
+                name: func.ident.clone(),
                 args: func
                     .ty
                     .args
-                    .into_iter()
-                    .map(|(n, ty)| (n, ty.into_type()))
+                    .iter()
+                    .map(|(n, ty)| (n.clone(), ty.to_type()))
                     .collect(),
-                ret: func.ty.ret.map(|ty| ty.into_type()),
+                ret: func.ty.ret.as_ref().map(|ty| ty.to_type()),
             };
             funcs.push(func);
+        }
+        funcs
+    }
+
+    pub fn into_functions(self) -> Vec<AbiFunction> {
+        let mut funcs = self.functions();
+        for object in self.objects() {
+            funcs.extend(object.methods);
         }
         funcs
     }
 }
 
 impl Type {
-    pub fn into_type(self) -> AbiType {
+    pub fn to_type(&self) -> AbiType {
         match self {
             Self::U8 => AbiType::Prim(PrimType::U8),
             Self::U16 => AbiType::Prim(PrimType::U16),
@@ -133,22 +174,22 @@ impl Type {
             Self::Bool => AbiType::Prim(PrimType::Bool),
             Self::F32 => AbiType::Prim(PrimType::F32),
             Self::F64 => AbiType::Prim(PrimType::F64),
-            Self::Ref(inner) => match *inner {
+            Self::Ref(inner) => match &**inner {
                 Self::String => AbiType::RefStr,
-                Self::Slice(inner) => match inner.into_type() {
+                Self::Slice(inner) => match inner.to_type() {
                     AbiType::Prim(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
-                Self::Ident(ident) => AbiType::Ref(ident),
+                Self::Ident(ident) => AbiType::Ref(ident.clone()),
                 ty => unimplemented!("&{:?}", ty),
             },
             Self::String => AbiType::String,
-            Self::Vec(inner) => match inner.into_type() {
+            Self::Vec(inner) => match inner.to_type() {
                 AbiType::Prim(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
             },
-            Self::Box(inner) => match *inner {
-                Self::Ident(ident) => AbiType::Box(ident),
+            Self::Box(inner) => match &**inner {
+                Self::Ident(ident) => AbiType::Box(ident.clone()),
                 ty => unimplemented!("Box<{:?}>", ty),
             },
             ty => unimplemented!("{:?}", ty),

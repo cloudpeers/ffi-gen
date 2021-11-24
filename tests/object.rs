@@ -41,7 +41,7 @@ compile_pass! {
     (
         let boxed = __CustomType_new_(42);
         assert_eq!(__CustomType_do_something(&boxed), 42);
-        drop_box_CustomType(boxed);
+        drop_box_CustomType(0 as _, boxed);
         assert!(was_dropped());
     ),
     (
@@ -49,13 +49,11 @@ compile_pass! {
         assert(boxed.do_something() == 42);
         boxed.drop();
         assert(api.was_dropped());
-        //while (!api.was_dropped()) {}
     ),
     (
         const boxed = new CustomType(api, 42);
         assert.equal(boxed.do_something(), 42);
         boxed.drop();
         assert.equal(api.was_dropped(), true);
-        //while (!api.was_dropped()) {}
     ),
 }
