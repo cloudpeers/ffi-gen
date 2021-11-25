@@ -227,7 +227,10 @@ impl RustGenerator {
                 AbiType::Ref(_) => unreachable!(),
             }
         } else {
-            quote!(drop(ret))
+            quote! {
+                #[allow(clippy::drop_copy)]
+                drop(ret)
+            }
         }
     }
 

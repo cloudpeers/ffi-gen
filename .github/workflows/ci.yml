@@ -13,15 +13,12 @@ jobs:
     - name: Checkout sources
       uses: actions/checkout@v2
 
-
-    - run: node --version
-    - run: rustc --version
-
     - name: Install rust toolchain
       uses: hecrj/setup-rust-action@v1
 
     - uses: dart-lang/setup-dart@v1
     - run: npm i -g prettier 
+    - run: cargo install --git https://github.com/vmx/wasm-multi-value-reverse-polyfill
 
     - name: cargo test
       run: cargo test --all-features --workspace
