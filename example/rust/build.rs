@@ -7,7 +7,7 @@ fn main() {
     let s = std::fs::read_to_string(path).unwrap();
     let iface = Interface::parse(&s).unwrap();
     let dart = DartGenerator::new("api".to_string());
-    let js = JsGenerator::new();
+    let js = JsGenerator::default();
     let dart = dart.generate(iface.clone()).to_file_string().unwrap();
     let js = js.generate(iface).to_file_string().unwrap();
     std::fs::write("../dart/lib/bindings.dart", &dart).unwrap();

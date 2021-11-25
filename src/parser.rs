@@ -158,24 +158,21 @@ impl FunctionType {
                 }
                 Rule::args => {
                     for pair in pair.into_inner() {
-                        match pair.as_rule() {
-                            Rule::arg => {
-                                let mut ident = None;
-                                let mut ty = None;
-                                for pair in pair.into_inner() {
-                                    match pair.as_rule() {
-                                        Rule::ident => {
-                                            ident = Some(pair.as_str().to_string());
-                                        }
-                                        Rule::type_ => {
-                                            ty = Some(Type::parse(pair)?);
-                                        }
-                                        _ => {}
+                        if pair.as_rule() == Rule::arg {
+                            let mut ident = None;
+                            let mut ty = None;
+                            for pair in pair.into_inner() {
+                                match pair.as_rule() {
+                                    Rule::ident => {
+                                        ident = Some(pair.as_str().to_string());
                                     }
+                                    Rule::type_ => {
+                                        ty = Some(Type::parse(pair)?);
+                                    }
+                                    _ => {}
                                 }
-                                args.push((ident.unwrap(), ty.unwrap()));
                             }
-                            _ => {}
+                            args.push((ident.unwrap(), ty.unwrap()));
                         }
                     }
                 }
@@ -249,7 +246,7 @@ impl Type {
             | Rule::res
             | Rule::ref_
             | Rule::mut_ => {
-                let first = pair.as_str().chars().nth(0).unwrap();
+                let first = pair.as_str().chars().next().unwrap();
                 let second = pair.as_str().chars().nth(1).unwrap();
                 let mut inner = None;
                 for pair in pair.into_inner() {

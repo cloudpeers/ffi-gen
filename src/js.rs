@@ -5,11 +5,13 @@ pub struct JsGenerator {
     abi: Abi,
 }
 
-impl JsGenerator {
-    pub fn new() -> Self {
+impl Default for JsGenerator {
+    fn default() -> Self {
         Self { abi: Abi::Wasm(32) }
     }
+}
 
+impl JsGenerator {
     pub fn generate(&self, iface: Interface) -> js::Tokens {
         quote! {
             // a node fetch polyfill that won't trigger webpack
@@ -393,7 +395,7 @@ pub mod test_runner {
         let mut rust_gen = RustGenerator::new(Abi::Wasm(32));
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
-        let js_gen = JsGenerator::new();
+        let js_gen = JsGenerator::default();
         let js_tokens = js_gen.generate(iface.clone());
 
         let library_tokens = quote! {

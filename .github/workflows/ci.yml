@@ -8,7 +8,7 @@ name: ffi-gen
 
 jobs:
   test:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
@@ -20,7 +20,7 @@ jobs:
       run: cargo test --all-features --workspace
 
   rustfmt:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
@@ -34,7 +34,7 @@ jobs:
       run: cargo fmt --all -- --check
 
   clippy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout sources
       uses: actions/checkout@v2
