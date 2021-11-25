@@ -18,7 +18,7 @@ jobs:
 
     - uses: dart-lang/setup-dart@v1
     - run: npm i -g prettier 
-    - run: cargo install --git https://github.com/vmx/wasm-multi-value-reverse-polyfill --exact
+    - run: cargo install --git https://github.com/vmx/wasm-multi-value-reverse-polyfill --locked
 
     - name: cargo test
       run: cargo test --all-features --workspace
