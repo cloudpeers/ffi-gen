@@ -454,7 +454,7 @@ pub mod test_runner {
                     .arg("wasm32-unknown-unknown")
                     .arg(#(quoted(rust_file.as_ref().to_str().unwrap())))
                     .status()
-                    .unwrap()
+                    .expect("Compiling lib")
                     .success();
                 assert!(ret);
                 //println!("{}", #_(#bin));
@@ -463,7 +463,7 @@ pub mod test_runner {
                     .arg("--expose-gc")
                     .arg(#(quoted(js_file.as_ref().to_str().unwrap())))
                     .status()
-                    .unwrap()
+                    .expect("Running node")
                     .success();
                 assert!(ret);
             }

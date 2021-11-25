@@ -13,6 +13,10 @@ jobs:
     - name: Checkout sources
       uses: actions/checkout@v2
 
+
+    - run: node --version
+    - run: rustc --version
+
     - name: Install rust toolchain
       uses: hecrj/setup-rust-action@v1
 
