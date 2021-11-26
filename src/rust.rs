@@ -148,7 +148,6 @@ impl RustGenerator {
                 #(name)_len: #(self.generate_usize()),
                 #(name)_cap: #(self.generate_usize()),
             },
-            AbiType::Box(ident) => quote!(#name: Box<#ident>,),
             AbiType::Ref(ident) => quote!(#name: &#ident,),
             AbiType::Object(ident) => quote!(#name: Box<#ident>,),
         }
@@ -183,7 +182,7 @@ impl RustGenerator {
                     )
                 };
             },
-            AbiType::Box(_) | AbiType::Ref(_) | AbiType::Object(_) => quote!(),
+            AbiType::Ref(_) | AbiType::Object(_) => quote!(),
         }
     }
 
@@ -193,7 +192,7 @@ impl RustGenerator {
                 AbiType::Prim(ty) => quote!(-> #(self.generate_prim_type(*ty))),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(-> #(self.generate_slice())),
                 AbiType::String | AbiType::Vec(_) => quote!(-> #(self.generate_alloc())),
-                AbiType::Box(ident) | AbiType::Object(ident) => {
+                AbiType::Object(ident) => {
                     self.destructors.insert(ident.clone());
                     quote!(-> Box<#ident>)
                 }
@@ -223,7 +222,7 @@ impl RustGenerator {
                         cap: ret.capacity() as _,
                     }
                 },
-                AbiType::Box(_) | AbiType::Object(_) => quote!(ret),
+                AbiType::Object(_) => quote!(ret),
                 AbiType::Ref(_) => unreachable!(),
             }
         } else {

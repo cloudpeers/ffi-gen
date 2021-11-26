@@ -199,9 +199,8 @@ impl JsGenerator {
                     #(name)_buf.set(#name, 0);
                 }
             }
-            AbiType::Box(_) => quote!(const #(name)_ptr = #(name).move();),
-            AbiType::Ref(_) => quote!(const #(name)_ptr = #(name).borrow();),
-            AbiType::Object(_) => todo!(),
+            AbiType::Ref(_) => quote!(const #(name)_ptr = #(name).box.borrow();),
+            AbiType::Object(_) => quote!(const #(name)_ptr = #(name).box.move();),
         }
     }
 
@@ -210,8 +209,7 @@ impl JsGenerator {
             AbiType::Prim(_) => quote!(#name,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
-            AbiType::Box(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
-            AbiType::Object(_) => todo!(),
+            AbiType::Object(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
         }
     }
 
@@ -231,8 +229,7 @@ impl JsGenerator {
                     }
                 }
             }
-            AbiType::Box(_) | AbiType::Ref(_) => quote!(),
-            AbiType::Object(_) => todo!(),
+            AbiType::Object(_) | AbiType::Ref(_) => quote!(),
         }
     }
 
@@ -272,13 +269,6 @@ impl JsGenerator {
                         }
                     }
                 }
-                AbiType::Box(ident) => {
-                    let destructor = format!("drop_box_{}", ident);
-                    quote! {
-                        const destructor = () => { #api.drop(#_(#destructor), ret) };
-                        const ret_box = new Box(ret, destructor);
-                    }
-                }
                 AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
                 AbiType::Object(ident) => {
                     let destructor = format!("drop_box_{}", ident);
@@ -300,7 +290,7 @@ impl JsGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
-                AbiType::Box(_) | AbiType::Ref(_) => quote!(return ret_box;),
+                AbiType::Ref(_) => unreachable!(),
                 AbiType::Object(_) => quote!(return ret_obj;),
             }
         } else {
@@ -368,7 +358,7 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) | AbiType::Box(_) | AbiType::Ref(_) | AbiType::Object(_) => None,
+                AbiType::Prim(_) | AbiType::Ref(_) | AbiType::Object(_) => None,
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
             }

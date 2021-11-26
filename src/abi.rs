@@ -77,7 +77,6 @@ pub enum AbiType {
     String,
     RefSlice(PrimType),
     Vec(PrimType),
-    Box(String),
     Ref(String),
     Object(String),
 }
@@ -186,10 +185,6 @@ impl Interface {
             Type::Vec(inner) => match self.to_type(inner) {
                 AbiType::Prim(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
-            },
-            Type::Box(inner) => match &**inner {
-                Type::Ident(ident) => AbiType::Box(ident.clone()),
-                ty => unimplemented!("Box<{:?}>", ty),
             },
             Type::Ident(ident) if self.is_object(ident) => AbiType::Object(ident.clone()),
             ty => unimplemented!("{:?}", ty),
