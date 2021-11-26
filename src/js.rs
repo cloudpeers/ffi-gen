@@ -71,8 +71,8 @@ impl TsGenerator {
                     | PrimType::F32
                     | PrimType::F64 => quote!(number),
                     PrimType::U64 | PrimType::I64 => quote!(BigInt),
-                    PrimType::Bool => quote!(boolean),
                 },
+                AbiType::Bool => quote!(boolean),
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
                     // TODO String etcs
@@ -269,8 +269,8 @@ impl JsGenerator {
 
     fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(PrimType::Bool) => quote!(const #(name)_int = #name ? 1 : 0;),
             AbiType::Prim(_) => quote!(),
+            AbiType::Bool => quote!(const #(name)_int = #name ? 1 : 0;),
             AbiType::RefStr | AbiType::String => quote! {
                 const #(name)_ptr = #api.allocate(#name.length, 1);
                 const #(name)_buf = new Uint8Array(#api.instance.exports.memory.buffer, #(name)_ptr, #name.length);
@@ -293,8 +293,8 @@ impl JsGenerator {
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
             AbiType::Prim(_) => quote!(#name,),
+            AbiType::Bool => quote!(#(name)_int,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
             AbiType::Object(_) | AbiType::RefObject(_) => quote!(#(name)_ptr,),
@@ -303,7 +303,7 @@ impl JsGenerator {
 
     fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(_) | AbiType::String | AbiType::Vec(_) => quote!(),
+            AbiType::Prim(_) | AbiType::Bool | AbiType::String | AbiType::Vec(_) => quote!(),
             AbiType::RefStr => quote! {
                 if (#name.length > 0) {
                     this.deallocate(#(name)_ptr, #name.length, 1);
@@ -324,8 +324,8 @@ impl JsGenerator {
     fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(PrimType::Bool) => quote!(const ret_bool = ret > 0;),
                 AbiType::Prim(_) => quote!(),
+                AbiType::Bool => quote!(const ret_bool = ret > 0;),
                 AbiType::RefStr => quote! {
                     const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
                     const decoder = new TextDecoder();
@@ -376,8 +376,8 @@ impl JsGenerator {
     fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(PrimType::Bool) => quote!(return ret_bool;),
                 AbiType::Prim(_) => quote!(return ret;),
+                AbiType::Bool => quote!(return ret_bool;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
                 AbiType::RefObject(_) => unreachable!(),
@@ -402,7 +402,6 @@ impl JsGenerator {
             PrimType::Isize => quote!(Int32Array),
             PrimType::F32 => quote!(Float32Array),
             PrimType::F64 => quote!(Float64Array),
-            PrimType::Bool => quote!(Uint8Array),
         }
     }
 }
@@ -448,7 +447,9 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) | AbiType::RefObject(_) | AbiType::Object(_) => None,
+                AbiType::Prim(_) | AbiType::Bool | AbiType::RefObject(_) | AbiType::Object(_) => {
+                    None
+                }
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
             }

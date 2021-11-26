@@ -139,6 +139,7 @@ impl RustGenerator {
     fn generate_arg(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#name: #(self.generate_prim_type(*ty)),),
+            AbiType::Bool => quote!(#name: bool,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                 #(name)_ptr: #(self.generate_isize()),
                 #(name)_len: #(self.generate_usize()),
@@ -155,7 +156,7 @@ impl RustGenerator {
 
     fn generate_lift(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
-            AbiType::Prim(_) => quote!(let #(name) = #(name) as _;),
+            AbiType::Prim(_) | AbiType::Bool => quote!(let #(name) = #(name) as _;),
             AbiType::RefSlice(ty) => quote! {
                 let #name: &[#(self.generate_prim_type(*ty))] =
                     unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
@@ -188,25 +189,30 @@ impl RustGenerator {
 
     fn generate_return(&mut self, ret: Option<&AbiType>) -> rust::Tokens {
         if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(ty) => quote!(-> #(self.generate_prim_type(*ty))),
-                AbiType::RefStr | AbiType::RefSlice(_) => quote!(-> #(self.generate_slice())),
-                AbiType::String | AbiType::Vec(_) => quote!(-> #(self.generate_alloc())),
-                AbiType::Object(ident) => {
-                    self.destructors.insert(ident.clone());
-                    quote!(-> Box<#ident>)
-                }
-                AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
+            if let AbiType::Object(ident) = ret {
+                self.destructors.insert(ident.clone());
             }
+            quote!(-> #(self.generate_return_type(ret)))
         } else {
             quote!()
+        }
+    }
+
+    fn generate_return_type(&self, ret: &AbiType) -> rust::Tokens {
+        match ret {
+            AbiType::Prim(ty) => self.generate_prim_type(*ty),
+            AbiType::Bool => quote!(bool),
+            AbiType::RefStr | AbiType::RefSlice(_) => self.generate_slice(),
+            AbiType::String | AbiType::Vec(_) => self.generate_alloc(),
+            AbiType::Object(ident) => quote!(Box<#ident>),
+            AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
         }
     }
 
     fn generate_lower(&self, ret: Option<&AbiType>) -> rust::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) => quote!(ret as _),
+                AbiType::Prim(_) | AbiType::Bool => quote!(ret as _),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                     #(self.generate_slice()) {
                         ptr: ret.as_ptr() as _,
@@ -245,7 +251,6 @@ impl RustGenerator {
             PrimType::I32 => quote!(i32),
             PrimType::I64 => quote!(i64),
             PrimType::Isize => quote!(isize),
-            PrimType::Bool => quote!(bool),
             PrimType::F32 => quote!(f32),
             PrimType::F64 => quote!(f64),
         }

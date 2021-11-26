@@ -276,6 +276,7 @@ impl DartGenerator {
     fn generate_arg(&self, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type(*ty)) #name,),
+            AbiType::Bool => quote!(bool #name,),
             AbiType::RefStr | AbiType::String => quote!(String #name,),
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_prim_type(*ty))> #name,)
@@ -287,6 +288,7 @@ impl DartGenerator {
     fn generate_arg_native(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type_native(*ty)),),
+            AbiType::Bool => quote!(ffi.Uint8,),
             AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr,),
             AbiType::RefSlice(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr,)
@@ -306,6 +308,7 @@ impl DartGenerator {
     fn generate_arg_wrapped(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
             AbiType::Prim(ty) => quote!(#(self.generate_prim_type_wrapped(*ty)),),
+            AbiType::Bool => quote!(int,),
             AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, int,),
             AbiType::String => quote!(ffi.Pointer<ffi.Uint8>, int, int,),
             AbiType::RefSlice(ty) => {
@@ -322,8 +325,8 @@ impl DartGenerator {
 
     fn generate_lower(&self, api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            AbiType::Prim(PrimType::Bool) => quote!(final int #(name)_int = #name ? 1 : 0;),
             AbiType::Prim(_) => quote!(),
+            AbiType::Bool => quote!(final int #(name)_int = #name ? 1 : 0;),
             AbiType::RefStr | AbiType::String => quote! {
                 final #(name)_utf8 = utf8.encode(#(name));
                 final int #(name)_len = #(name)_utf8.length;
@@ -348,8 +351,8 @@ impl DartGenerator {
 
     fn generate_lower_args(&self, _api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
             AbiType::Prim(_) => quote!(#(name)),
+            AbiType::Bool => quote!(#(name)_int,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
             AbiType::RefObject(_) | AbiType::Object(_) => quote!(#(name)_ptr,),
@@ -358,7 +361,7 @@ impl DartGenerator {
 
     fn generate_lower_cleanup(&self, api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
         match ty {
-            AbiType::Prim(_) => quote!(),
+            AbiType::Prim(_) | AbiType::Bool => quote!(),
             AbiType::RefStr | AbiType::RefSlice(_) => {
                 quote!(#api.deallocate(#(name)_ptr, #(name)_len, 1);)
             }
@@ -370,8 +373,8 @@ impl DartGenerator {
     fn generate_lift(&self, api: &dart::Tokens, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(PrimType::Bool) => quote!(final ret_bool = ret > 0;),
                 AbiType::Prim(_) => quote!(),
+                AbiType::Bool => quote!(final ret_bool = ret > 0;),
                 AbiType::RefStr => quote! {
                     final ret_str = utf8.decode(ret.ptr.asTypedList(ret.len));
                 },
@@ -412,8 +415,8 @@ impl DartGenerator {
     fn generate_return_stmt(&self, ret: Option<&AbiType>) -> dart::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(PrimType::Bool) => quote!(return ret_bool;),
                 AbiType::Prim(_) => quote!(return ret;),
+                AbiType::Bool => quote!(return ret_bool;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
                 AbiType::RefObject(_) => unreachable!(),
@@ -428,6 +431,7 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type(*ty),
+                AbiType::Bool => quote!(bool),
                 AbiType::RefStr | AbiType::String => quote!(String),
                 AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                     quote!(List<#(self.generate_prim_type(*ty))>)
@@ -444,6 +448,7 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
+                AbiType::Bool => quote!(ffi.Uint8),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
@@ -458,6 +463,7 @@ impl DartGenerator {
         if let Some(ret) = ret {
             match ret {
                 AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
+                AbiType::Bool => quote!(int),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
@@ -488,7 +494,6 @@ impl DartGenerator {
                 64 => quote!(ffi.Uint64),
                 _ => unimplemented!(),
             },
-            PrimType::Bool => quote!(ffi.Uint8),
             PrimType::F32 => quote!(ffi.Float),
             PrimType::F64 => quote!(ffi.Double),
         }
@@ -505,8 +510,7 @@ impl DartGenerator {
             | PrimType::I16
             | PrimType::I32
             | PrimType::I64
-            | PrimType::Isize
-            | PrimType::Bool => quote!(int),
+            | PrimType::Isize => quote!(int),
             PrimType::F32 | PrimType::F64 => quote!(double),
         }
     }
@@ -523,7 +527,6 @@ impl DartGenerator {
             | PrimType::I32
             | PrimType::I64
             | PrimType::Isize => quote!(int),
-            PrimType::Bool => quote!(bool),
             PrimType::F32 | PrimType::F64 => quote!(double),
         }
     }

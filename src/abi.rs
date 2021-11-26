@@ -24,7 +24,7 @@ impl Abi {
     /// Returns the size and alignment of a primitive type.
     pub fn layout(self, ty: PrimType) -> (usize, usize) {
         let size = match ty {
-            PrimType::U8 | PrimType::I8 | PrimType::Bool => 1,
+            PrimType::U8 | PrimType::I8 => 1,
             PrimType::U16 | PrimType::I16 => 2,
             PrimType::U32 | PrimType::I32 | PrimType::F32 => 4,
             PrimType::U64 | PrimType::I64 | PrimType::F64 => 8,
@@ -73,6 +73,7 @@ impl AbiFunction {
 #[derive(Clone, Debug)]
 pub enum AbiType {
     Prim(PrimType),
+    Bool,
     RefStr,
     String,
     RefSlice(PrimType),
@@ -93,7 +94,6 @@ pub enum PrimType {
     I32,
     I64,
     Isize,
-    Bool,
     F32,
     F64,
 }
@@ -169,9 +169,9 @@ impl Interface {
             Type::I32 => AbiType::Prim(PrimType::I32),
             Type::I64 => AbiType::Prim(PrimType::I64),
             Type::Isize => AbiType::Prim(PrimType::Isize),
-            Type::Bool => AbiType::Prim(PrimType::Bool),
             Type::F32 => AbiType::Prim(PrimType::F32),
             Type::F64 => AbiType::Prim(PrimType::F64),
+            Type::Bool => AbiType::Bool,
             Type::Ref(inner) => match &**inner {
                 Type::String => AbiType::RefStr,
                 Type::Slice(inner) => match self.to_type(inner) {
