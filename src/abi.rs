@@ -66,7 +66,7 @@ impl AbiFunction {
     }
 
     pub fn self_type(&self) -> AbiType {
-        AbiType::Ref(self.object.clone().unwrap())
+        AbiType::RefObject(self.object.clone().unwrap())
     }
 }
 
@@ -77,7 +77,7 @@ pub enum AbiType {
     String,
     RefSlice(PrimType),
     Vec(PrimType),
-    Ref(String),
+    RefObject(String),
     Object(String),
 }
 
@@ -178,7 +178,7 @@ impl Interface {
                     AbiType::Prim(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
-                Type::Ident(ident) => AbiType::Ref(ident.clone()),
+                Type::Ident(ident) => AbiType::RefObject(ident.clone()),
                 ty => unimplemented!("&{:?}", ty),
             },
             Type::String => AbiType::String,

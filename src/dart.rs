@@ -280,7 +280,7 @@ impl DartGenerator {
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_prim_type(*ty))> #name,)
             }
-            AbiType::Object(ty) | AbiType::Ref(ty) => quote!(#ty #name,),
+            AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty #name,),
         }
     }
 
@@ -297,7 +297,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr, ffi.IntPtr,)
             }
-            AbiType::Ref(_) | AbiType::Object(_) => {
+            AbiType::RefObject(_) | AbiType::Object(_) => {
                 quote!(ffi.Pointer<ffi.Void>,)
             }
         }
@@ -314,7 +314,7 @@ impl DartGenerator {
             AbiType::Vec(ty) => {
                 quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,)
             }
-            AbiType::Ref(_) | AbiType::Object(_) => {
+            AbiType::RefObject(_) | AbiType::Object(_) => {
                 quote!(ffi.Pointer<ffi.Void>,)
             }
         }
@@ -341,7 +341,7 @@ impl DartGenerator {
                     #(name)_view.setAll(0, #(name));
                 }
             }
-            AbiType::Ref(_) => quote!(final #(name)_ptr = #(name)._box.borrow();),
+            AbiType::RefObject(_) => quote!(final #(name)_ptr = #(name)._box.borrow();),
             AbiType::Object(_) => quote!(final #(name)_ptr = #(name)._box.move();),
         }
     }
@@ -352,7 +352,7 @@ impl DartGenerator {
             AbiType::Prim(_) => quote!(#(name)),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
-            AbiType::Ref(_) | AbiType::Object(_) => quote!(#(name)_ptr,),
+            AbiType::RefObject(_) | AbiType::Object(_) => quote!(#(name)_ptr,),
         }
     }
 
@@ -363,7 +363,7 @@ impl DartGenerator {
                 quote!(#api.deallocate(#(name)_ptr, #(name)_len, 1);)
             }
             AbiType::String | AbiType::Vec(_) => quote!(),
-            AbiType::Ref(_) | AbiType::Object(_) => quote!(),
+            AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
         }
     }
 
@@ -394,7 +394,7 @@ impl DartGenerator {
                         }
                     }
                 }
-                AbiType::Ref(_) => unreachable!(),
+                AbiType::RefObject(_) => unreachable!(),
                 AbiType::Object(ident) => {
                     let destructor = format!("drop_box_{}", ident);
                     quote! {
@@ -416,7 +416,7 @@ impl DartGenerator {
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
-                AbiType::Ref(_) => unreachable!(),
+                AbiType::RefObject(_) => unreachable!(),
                 AbiType::Object(_) => quote!(return ret_obj;),
             }
         } else {
@@ -432,7 +432,7 @@ impl DartGenerator {
                 AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                     quote!(List<#(self.generate_prim_type(*ty))>)
                 }
-                AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
+                AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
                 AbiType::Object(ident) => quote!(#ident),
             }
         } else {
@@ -447,7 +447,7 @@ impl DartGenerator {
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
-                AbiType::Ref(_) => unreachable!(),
+                AbiType::RefObject(_) => unreachable!(),
             }
         } else {
             quote!(ffi.Void)
@@ -461,7 +461,7 @@ impl DartGenerator {
                 AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
-                AbiType::Ref(_) => unreachable!(),
+                AbiType::RefObject(_) => unreachable!(),
             }
         } else {
             quote!(void)

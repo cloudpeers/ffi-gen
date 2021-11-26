@@ -148,7 +148,7 @@ impl RustGenerator {
                 #(name)_len: #(self.generate_usize()),
                 #(name)_cap: #(self.generate_usize()),
             },
-            AbiType::Ref(ident) => quote!(#name: &#ident,),
+            AbiType::RefObject(ident) => quote!(#name: &#ident,),
             AbiType::Object(ident) => quote!(#name: Box<#ident>,),
         }
     }
@@ -182,7 +182,7 @@ impl RustGenerator {
                     )
                 };
             },
-            AbiType::Ref(_) | AbiType::Object(_) => quote!(),
+            AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
         }
     }
 
@@ -196,7 +196,7 @@ impl RustGenerator {
                     self.destructors.insert(ident.clone());
                     quote!(-> Box<#ident>)
                 }
-                AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
+                AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
             }
         } else {
             quote!()
@@ -223,7 +223,7 @@ impl RustGenerator {
                     }
                 },
                 AbiType::Object(_) => quote!(ret),
-                AbiType::Ref(_) => unreachable!(),
+                AbiType::RefObject(_) => unreachable!(),
             }
         } else {
             quote! {
