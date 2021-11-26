@@ -45,7 +45,6 @@ pub struct AbiObject {
 
 pub struct AbiFunction {
     pub is_static: bool,
-    pub is_async: bool,
     pub object: Option<String>,
     pub name: String,
     pub args: Vec<(String, AbiType)>,
@@ -80,6 +79,10 @@ pub enum AbiType {
     Vec(PrimType),
     RefObject(String),
     Object(String),
+    Option(Box<AbiType>),
+    Result(Box<AbiType>),
+    Future(Box<AbiType>),
+    Stream(Box<AbiType>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -106,7 +109,6 @@ impl Interface {
             for method in &object.methods {
                 let func = AbiFunction {
                     is_static: method.is_static,
-                    is_async: method.func.ty.is_async,
                     object: Some(object.ident.clone()),
                     name: method.func.ident.clone(),
                     args: method
@@ -133,7 +135,6 @@ impl Interface {
         for func in &self.functions {
             let func = AbiFunction {
                 is_static: false,
-                is_async: func.ty.is_async,
                 object: None,
                 name: func.ident.clone(),
                 args: func
@@ -187,6 +188,10 @@ impl Interface {
                 ty => unimplemented!("Vec<{:?}>", ty),
             },
             Type::Ident(ident) if self.is_object(ident) => AbiType::Object(ident.clone()),
+            Type::Option(ty) => AbiType::Option(Box::new(self.to_type(ty))),
+            Type::Result(ty) => AbiType::Result(Box::new(self.to_type(ty))),
+            Type::Future(ty) => AbiType::Future(Box::new(self.to_type(ty))),
+            Type::Stream(ty) => AbiType::Stream(Box::new(self.to_type(ty))),
             ty => unimplemented!("{:?}", ty),
         }
     }

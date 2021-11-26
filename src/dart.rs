@@ -282,6 +282,10 @@ impl DartGenerator {
                 quote!(List<#(self.generate_prim_type(*ty))> #name,)
             }
             AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty #name,),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -302,6 +306,10 @@ impl DartGenerator {
             AbiType::RefObject(_) | AbiType::Object(_) => {
                 quote!(ffi.Pointer<ffi.Void>,)
             }
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -320,6 +328,10 @@ impl DartGenerator {
             AbiType::RefObject(_) | AbiType::Object(_) => {
                 quote!(ffi.Pointer<ffi.Void>,)
             }
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -346,6 +358,10 @@ impl DartGenerator {
             }
             AbiType::RefObject(_) => quote!(final #(name)_ptr = #(name)._box.borrow();),
             AbiType::Object(_) => quote!(final #(name)_ptr = #(name)._box.move();),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -356,6 +372,10 @@ impl DartGenerator {
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
             AbiType::RefObject(_) | AbiType::Object(_) => quote!(#(name)_ptr,),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -367,6 +387,10 @@ impl DartGenerator {
             }
             AbiType::String | AbiType::Vec(_) => quote!(),
             AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -406,6 +430,10 @@ impl DartGenerator {
                         final ret_obj = new #ident._(#api, ret_box);
                     }
                 }
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!()
@@ -421,6 +449,10 @@ impl DartGenerator {
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
                 AbiType::RefObject(_) => unreachable!(),
                 AbiType::Object(_) => quote!(return ret_obj;),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!()
@@ -438,6 +470,10 @@ impl DartGenerator {
                 }
                 AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
                 AbiType::Object(ident) => quote!(#ident),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!(void)
@@ -453,6 +489,10 @@ impl DartGenerator {
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
                 AbiType::RefObject(_) => unreachable!(),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!(ffi.Void)
@@ -468,6 +508,10 @@ impl DartGenerator {
                 AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
                 AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
                 AbiType::RefObject(_) => unreachable!(),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!(void)

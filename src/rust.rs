@@ -43,6 +43,18 @@ impl RustGenerator {
                 pub cap: u64,
             }
 
+            #[repr(C)]
+            pub enum FfiOption<T> {
+                Some(T),
+                None,
+            }
+
+            #[repr(C)]
+            pub enum FfiResult<T, E> {
+                Ok(T),
+                Err(E),
+            }
+
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
             pub fn panic_abort<R>(func: impl FnOnce() -> R + std::panic::UnwindSafe) -> R {
@@ -151,6 +163,13 @@ impl RustGenerator {
             },
             AbiType::RefObject(ident) => quote!(#name: &#ident,),
             AbiType::Object(ident) => quote!(#name: Box<#ident>,),
+            AbiType::Option(ty) => {
+                let inner = self.generate_arg(name, ty);
+                quote!(#(name)_variant: i32, #inner)
+            }
+            AbiType::Result(ty) => panic!("invalid argument type Result<{:?}>.", ty),
+            AbiType::Future(ty) => panic!("invalid argument type Future<{:?}>.", ty),
+            AbiType::Stream(ty) => panic!("invalid argument type Stream<{:?}>.", ty),
         }
     }
 
@@ -184,6 +203,20 @@ impl RustGenerator {
                 };
             },
             AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
+            AbiType::Option(ty) => {
+                let inner = self.generate_lift(name, ty);
+                quote! {
+                    let #name = if #(name)_variant == 0 {
+                        None
+                    } else {
+                        #inner
+                        Some(#name)
+                    };
+                }
+            }
+            AbiType::Result(_) => unreachable!(),
+            AbiType::Future(_) => unreachable!(),
+            AbiType::Stream(_) => unreachable!(),
         }
     }
 
@@ -206,6 +239,14 @@ impl RustGenerator {
             AbiType::String | AbiType::Vec(_) => self.generate_alloc(),
             AbiType::Object(ident) => quote!(Box<#ident>),
             AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
+            AbiType::Option(ty) => quote!(FfiOption<#(self.generate_return_type(ty))>),
+            AbiType::Result(ty) => quote!(FfiResult<#(self.generate_return_type(ty)), #(self.generate_alloc())>),
+            AbiType::Future(ty) => {
+                quote!(Box<dyn Future<Output = #(self.generate_return_type(ty))> + Send + Unpin + 'static>)
+            }
+            AbiType::Stream(ty) => {
+                quote!(Box<dyn Stream<Item = #(self.generate_return_type(ty))> + Send + Unpin + 'static>)
+            }
         }
     }
 
@@ -220,8 +261,7 @@ impl RustGenerator {
                     }
                 },
                 AbiType::String | AbiType::Vec(_) => quote! {
-                    use std::mem::ManuallyDrop;
-                    let ret = ManuallyDrop::new(ret);
+                    let ret = std::mem::ManuallyDrop::new(ret);
                     #(self.generate_alloc()) {
                         ptr: ret.as_ptr() as _,
                         len: ret.len() as _,
@@ -230,6 +270,28 @@ impl RustGenerator {
                 },
                 AbiType::Object(_) => quote!(ret),
                 AbiType::RefObject(_) => unreachable!(),
+                AbiType::Option(_) => quote! {
+                    match ret {
+                        Some(res) => FfiOption::Some(res),
+                        None => FfiOption::None,
+                    }
+                },
+                AbiType::Result(_) => quote! {
+                    match ret {
+                        Ok(res) => FfiResult::Ok(res),
+                        Err(err) => {
+                            let ret = std::mem::ManuallyDrop::new(err.to_string());
+                            let ret = #(self.generate_alloc()) {
+                                ptr: ret.as_ptr() as _,
+                                len: ret.len() as _,
+                                cap: ret.capacity() as _,
+                            };
+                            FfiResult::Err(ret)
+                        }
+                    }
+                },
+                AbiType::Future(_) => quote!(Box::new(ret)),
+                AbiType::Stream(_) => quote!(Box::new(ret)),
             }
         } else {
             quote! {
