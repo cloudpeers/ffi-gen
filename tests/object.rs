@@ -90,7 +90,7 @@ compile_pass! {
     }
 
     export class CustomType {
-        static new_(value: number): CustomType;
+        static new_(api: Api, value: number): CustomType;
 
         do_something(): number;
 

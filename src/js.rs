@@ -16,7 +16,6 @@ pub struct TsGenerator;
 
 impl TsGenerator {
     pub fn generate(&self, iface: Interface) -> js::Tokens {
-        // TODO: Box Type
         quote! {
             /* tslint:disable */
             /* eslint:disable */
@@ -47,7 +46,12 @@ impl TsGenerator {
         };
         // TODO: nested Promises
         let wrap_in_promise_end = if func.is_async { quote!(>) } else { quote!() };
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(&wrap_in_promise_begin)#(self.generate_return_type(Some(ty)))#(&wrap_in_promise_end)));
+        let api_arg = if func.is_static {
+            quote!(api: Api, #<space>)
+        } else {
+            quote!()
+        };
+        let args = quote!(#(api_arg)#(for (name, ty) in &func.args join (, ) => #name: #(&wrap_in_promise_begin)#(self.generate_return_type(Some(ty)))#(&wrap_in_promise_end)));
         quote! {
             #r#static#(&func.name)(#args): #(self.generate_return_type(func.ret.as_ref()));
         }
