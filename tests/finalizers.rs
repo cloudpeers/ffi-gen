@@ -1,19 +1,17 @@
 use ffi_gen::compile_pass;
 
 compile_pass! {
-    boxed,
-    r#"make_box fn(value: u32) -> Box<CustomType>;
-    do_something fn(boxed: &CustomType) -> u32;
+    finalizers,
+    r#"make_box fn() -> CustomType;
     was_dropped fn() -> bool;
+    object CustomType {}
     "#,
     (
         use std::sync::atomic::{AtomicBool, Ordering};
 
         static WAS_DROPPED: AtomicBool = AtomicBool::new(false);
 
-        pub struct CustomType {
-            value: u32,
-        }
+        pub struct CustomType;
 
         impl Drop for CustomType {
             fn drop(&mut self) {
@@ -21,12 +19,8 @@ compile_pass! {
             }
         }
 
-        pub fn make_box(value: u32) -> Box<CustomType> {
-            Box::new(CustomType { value })
-        }
-
-        pub fn do_something(boxed: &CustomType) -> u32 {
-            boxed.value
+        pub fn make_box() -> Box<CustomType> {
+            Box::new(CustomType)
         }
 
         pub fn was_dropped() -> bool {
@@ -34,14 +28,12 @@ compile_pass! {
         }
     ),
     (
-        let boxed = __make_box(42);
-        assert_eq!(do_something(&boxed), 42);
+        let boxed = __make_box();
         drop_box_CustomType(core::ptr::null(), boxed);
         assert!(was_dropped());
     ),
     (
-        final boxed = api.make_box(42);
-        assert(api.do_something(boxed) == 42);
+        final boxed = api.make_box();
         //boxed.drop();
         //assert(api.was_dropped());
         final largeList = [];
@@ -52,8 +44,7 @@ compile_pass! {
     ),
     (
         const f = () => {
-            let boxed = api.make_box(42);
-            assert.equal(api.do_something(boxed), 42);
+            let boxed = api.make_box();
         };
         f();
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
