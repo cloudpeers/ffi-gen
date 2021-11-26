@@ -76,4 +76,25 @@ compile_pass! {
         obj.drop();
         assert.equal(api.was_dropped(), true);
     ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        create(value: number): CustomType;
+
+        was_dropped(): boolean;
+
+        drop(): void;
+    }
+
+    export class CustomType {
+        static new_(api: Api, value: number): CustomType;
+
+        do_something(): number;
+
+        drop(): void;
+    })
+
 }

@@ -55,4 +55,23 @@ compile_pass! {
             global.gc();
         }
     ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        make_box(): CustomType;
+
+        was_dropped(): boolean;
+
+        drop(): void;
+    }
+
+    export class CustomType {
+
+        drop(): void;
+    }
+    )
+
 }

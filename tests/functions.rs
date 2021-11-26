@@ -7,6 +7,17 @@ compile_pass! {
     ( __hello_world(); ),
     ( api.hello_world(); ),
     ( api.hello_world(); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(): void;
+
+        drop(): void;
+    })
+
 }
 
 compile_pass! {
@@ -20,6 +31,17 @@ compile_pass! {
     ( assert_eq!(__hello_world(), 42); ),
     ( assert(api.hello_world() == 42); ),
     ( assert.equal(api.hello_world(), 42); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(): number;
+
+        drop(): void;
+    })
+
 }
 
 compile_pass! {
@@ -33,6 +55,16 @@ compile_pass! {
     ( assert_eq!(__hello_world(42), 42); ),
     ( assert(api.hello_world(42) == 42); ),
     ( assert.equal(api.hello_world(42), 42); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(arg: number): number;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -46,6 +78,16 @@ compile_pass! {
     ( assert_eq!(__hello_world(true), true); ),
     ( assert(api.hello_world(true) == true); ),
     ( assert.strictEqual(api.hello_world(true), true); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(arg: boolean): boolean;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -59,6 +101,17 @@ compile_pass! {
     ( assert_eq!(__hello_world(42), 42); ),
     ( assert(api.hello_world(42) == 42); ),
     ( assert.equal(api.hello_world(42), 42); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(arg: number): number;
+
+        drop(): void;
+    })
+
 }
 
 compile_pass! {
@@ -72,6 +125,16 @@ compile_pass! {
     ( assert_eq!(__hello_world(42.24), 42.24); ),
     ( assert(api.hello_world(42.24) == 42.24); ),
     ( assert.equal(api.hello_world(42.24), 42.24); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        hello_world(arg: number): number;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -88,6 +151,16 @@ compile_pass! {
     ),
     ( assert(api.strlen("hello world") == 11); ),
     ( assert.equal(api.strlen("hello world"), 11); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        strlen(arg: string): number;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -105,6 +178,16 @@ compile_pass! {
     ),
     ( assert(api.strlen("hello world") == 11); ),
     ( assert.equal(api.strlen("hello world"), 11); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        strlen(arg: string): number;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -122,6 +205,16 @@ compile_pass! {
     ),
     ( assert(api.make_string() == "hello world"); ),
     ( assert.equal(api.make_string(), "hello world"); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        make_string(): string;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -141,6 +234,18 @@ compile_pass! {
     ),
     ( assert(api.as_str("hello world") == "hello world"); ),
     ( assert.equal(api.as_str("hello world"), "hello world"); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        as_str(s: string): string;
+
+        drop(): void;
+    }
+    )
+
 }
 
 compile_pass! {
@@ -160,6 +265,17 @@ compile_pass! {
         assert.deepEqual(api.to_vec([]), []);
         assert.deepEqual(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
     ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        to_vec(b: Array<number>): Array<number>;
+
+        drop(): void;
+    })
+
 }
 
 compile_pass! {
@@ -179,6 +295,17 @@ compile_pass! {
         assert.deepEqual(api.to_vec([]), []);
         assert.deepEqual(api.to_vec([0n, 1n, 2n, 3n, 4n]), [0n, 1n, 2n, 3n, 4n]);
     ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        to_vec(b: Array<BigInt>): Array<BigInt>;
+
+        drop(): void;
+    })
+
 }
 
 compile_pass! {
@@ -198,4 +325,15 @@ compile_pass! {
         assert.deepEqual(api.reverse([]), []);
         assert.deepEqual(api.reverse([0, 1, 2, 3, 4]), [4, 3, 2, 1, 0]);
     ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        reverse(b: Array<number>): Array<number>;
+
+        drop(): void;
+    })
+
 }
