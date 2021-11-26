@@ -80,19 +80,21 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         create(value: number): CustomType;
 
         was_dropped(): boolean;
+
+        drop(): void;
     }
 
     export class CustomType {
-        constructor(api: Api, box: Box);
-
         static new_(value: number): CustomType;
 
         do_something(): number;
+
+        drop(): void;
     })
 
 }

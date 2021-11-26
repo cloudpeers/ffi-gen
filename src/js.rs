@@ -23,9 +23,11 @@ impl TsGenerator {
             export class Api {
               constructor();
 
-              static fetch(url, imports): Promise<void>;
+              fetch(url, imports): Promise<void>;
 
               #(for func in iface.functions() join (#<line>#<line>) => #(self.generate_function(func)))
+
+              drop(): void;
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -81,10 +83,9 @@ impl TsGenerator {
     fn generate_object(&self, obj: AbiObject) -> js::Tokens {
         quote! {
             export class #(&obj.name) {
-                constructor(api: Api, box: Box);
-
-
                 #(for method in obj.methods join (#<line>#<line>) => #(self.generate_function(method)))
+
+                drop(): void;
             }
         }
     }

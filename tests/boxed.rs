@@ -68,13 +68,15 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         make_box(value: number): CustomType;
 
         do_something(boxed: CustomType): number;
 
         was_dropped(): boolean;
+
+        drop(): void;
     })
 
 }

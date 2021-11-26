@@ -11,9 +11,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(): void;
+
+        drop(): void;
     })
 
 }
@@ -33,9 +35,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(): number;
+
+        drop(): void;
     })
 
 }
@@ -55,9 +59,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(arg: number): number;
+
+        drop(): void;
     })
 }
 
@@ -76,9 +82,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(arg: boolean): boolean;
+
+        drop(): void;
     })
 }
 
@@ -97,9 +105,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(arg: number): number;
+
+        drop(): void;
     })
 
 }
@@ -119,9 +129,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         hello_world(arg: number): number;
+
+        drop(): void;
     })
 }
 
@@ -143,9 +155,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
+
+        drop(): void;
     })
 }
 
@@ -168,9 +182,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
+
+        drop(): void;
     })
 }
 
@@ -193,9 +209,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         make_string(): string;
+
+        drop(): void;
     })
 }
 
@@ -220,9 +238,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         as_str(s: string): string;
+
+        drop(): void;
     }
     )
 
@@ -249,9 +269,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         to_vec(b: Array<number>): Array<number>;
+
+        drop(): void;
     })
 
 }
@@ -277,9 +299,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         to_vec(b: Array<BigInt>): Array<BigInt>;
+
+        drop(): void;
     })
 
 }
@@ -305,9 +329,11 @@ compile_pass! {
     export class Api {
         constructor();
 
-        static fetch(url, imports): Promise<void>;
+        fetch(url, imports): Promise<void>;
 
         reverse(b: Array<number>): Array<number>;
+
+        drop(): void;
     })
 
 }
