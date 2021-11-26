@@ -60,3 +60,21 @@ pub unsafe extern "C" fn register_callback(port: i64, post_cobject: *const core:
     let obj: DartCObject =  core::mem::zeroed();
     post_cobject(port, &obj as *const _ as *const _);
 }
+
+pub struct DartWaker {
+    port: i64,
+    post_cobject: *const core::ffi::c_void,
+}
+
+pub struct DartFuture<T> {
+    future: Pin<Box<dyn Future<Output = T> + Send + 'static>>
+}
+
+impl DartFuture {
+    pub fn poll(&mut self, port: i64, post_cobject: *const core::ffi::c_void) -> Option<T> {
+        match self.future.poll() {
+            Poll::Ready(res) => Some(res),
+            Poll::Pending => None,
+        }
+    }
+}
