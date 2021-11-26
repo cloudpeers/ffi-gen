@@ -77,7 +77,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(true), true); ),
     ( assert(api.hello_world(true) == true); ),
-    ( assert.equal(api.hello_world(true), true); ),
+    ( assert.strictEqual(api.hello_world(true), true); ),
     (
     export class Api {
         constructor();

@@ -74,7 +74,7 @@ impl TsGenerator {
                     // TODO String etcs
                     quote!(Array<#(&self.generate_return_type(Some(&AbiType::Prim(*prim))))>)
                 }
-                AbiType::Box(i) | AbiType::Ref(i) | AbiType::Object(i) => quote!(#(i)),
+                AbiType::Ref(i) | AbiType::Object(i) => quote!(#(i)),
             }
         } else {
             quote!(void)
@@ -265,6 +265,7 @@ impl JsGenerator {
 
     fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
+            AbiType::Prim(PrimType::Bool) => quote!(const #(name)_int = #name ? 1 : 0;),
             AbiType::Prim(_) => quote!(),
             AbiType::RefStr | AbiType::String => quote! {
                 const #(name)_ptr = #api.allocate(#name.length, 1);
@@ -281,19 +282,18 @@ impl JsGenerator {
                     #(name)_buf.set(#name, 0);
                 }
             }
-            AbiType::Box(_) => quote!(const #(name)_ptr = #(name).move();),
-            AbiType::Ref(_) => quote!(const #(name)_ptr = #(name).borrow();),
-            AbiType::Object(_) => todo!(),
+            AbiType::Ref(_) => quote!(const #(name)_ptr = #(name).box.borrow();),
+            AbiType::Object(_) => quote!(const #(name)_ptr = #(name).box.move();),
         }
     }
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
+            AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
             AbiType::Prim(_) => quote!(#name,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
-            AbiType::Box(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
-            AbiType::Object(_) => todo!(),
+            AbiType::Object(_) | AbiType::Ref(_) => quote!(#(name)_ptr,),
         }
     }
 
@@ -313,14 +313,14 @@ impl JsGenerator {
                     }
                 }
             }
-            AbiType::Box(_) | AbiType::Ref(_) => quote!(),
-            AbiType::Object(_) => todo!(),
+            AbiType::Object(_) | AbiType::Ref(_) => quote!(),
         }
     }
 
     fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
+                AbiType::Prim(PrimType::Bool) => quote!(const ret_bool = ret > 0;),
                 AbiType::Prim(_) => quote!(),
                 AbiType::RefStr => quote! {
                     const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
@@ -354,13 +354,6 @@ impl JsGenerator {
                         }
                     }
                 }
-                AbiType::Box(ident) => {
-                    let destructor = format!("drop_box_{}", ident);
-                    quote! {
-                        const destructor = () => { #api.drop(#_(#destructor), ret) };
-                        const ret_box = new Box(ret, destructor);
-                    }
-                }
                 AbiType::Ref(ident) => panic!("invalid return type `&{}`", ident),
                 AbiType::Object(ident) => {
                     let destructor = format!("drop_box_{}", ident);
@@ -379,10 +372,11 @@ impl JsGenerator {
     fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
+                AbiType::Prim(PrimType::Bool) => quote!(return ret_bool;),
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
-                AbiType::Box(_) | AbiType::Ref(_) => quote!(return ret_box;),
+                AbiType::Ref(_) => unreachable!(),
                 AbiType::Object(_) => quote!(return ret_obj;),
             }
         } else {
@@ -450,7 +444,7 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) | AbiType::Box(_) | AbiType::Ref(_) | AbiType::Object(_) => None,
+                AbiType::Prim(_) | AbiType::Ref(_) | AbiType::Object(_) => None,
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
             }
