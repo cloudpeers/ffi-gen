@@ -6,7 +6,7 @@ mod rust;
 
 pub use abi::{Abi, AbiFunction, AbiObject, AbiType, PrimType};
 pub use dart::DartGenerator;
-pub use js::{JsGenerator, WasmMultiValueShim};
+pub use js::{JsGenerator, TsGenerator, WasmMultiValueShim};
 pub use parser::{Function, FunctionType, Interface, Method, Object, Type};
 pub use rust::RustGenerator;
 
@@ -14,11 +14,12 @@ pub use rust::RustGenerator;
 pub mod test_runner {
     pub use crate::dart::test_runner::compile_pass as compile_pass_dart;
     pub use crate::js::test_runner::compile_pass as compile_pass_js;
+    pub use crate::js::test_runner::compile_pass_ts;
     pub use crate::rust::test_runner::compile_pass as compile_pass_rust;
 
     #[macro_export]
     macro_rules! compile_pass {
-        ($ident:ident, $iface:expr, ($($api:tt)*), ($($rust:tt)*), ($($dart:tt)*), ($($js:tt)*),) => {
+        ($ident:ident, $iface:expr, ($($api:tt)*), ($($rust:tt)*), ($($dart:tt)*), ($($js:tt)*), ($($ts:tt)*)) => {
             mod $ident {
                 #[test]
                 fn rust() {
@@ -33,6 +34,11 @@ pub mod test_runner {
                 #[test]
                 fn js() {
                     $crate::test_runner::compile_pass_js($iface, genco::quote!($($api)*), genco::quote!($($js)*)).unwrap();
+                }
+
+                #[test]
+                fn ts() {
+                    $crate::test_runner::compile_pass_ts($iface, genco::quote!($($ts)*)).unwrap();
                 }
             }
         }

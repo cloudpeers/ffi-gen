@@ -11,6 +11,78 @@ impl Default for JsGenerator {
     }
 }
 
+#[derive(Default)]
+pub struct TsGenerator;
+
+impl TsGenerator {
+    pub fn generate(&self, iface: Interface) -> js::Tokens {
+        // TODO: Box Type
+        quote! {
+            /* tslint:disable */
+            /* eslint:disable */
+            export class Api {
+              constructor();
+
+              static fetch(url, imports): Promise<void>;
+
+              #(for func in iface.functions() join (#<line>#<line>) => #(self.generate_function(func)))
+            }
+
+            #(for obj in iface.objects() => #(self.generate_object(obj)))
+        }
+    }
+
+    fn generate_function(&self, func: AbiFunction) -> js::Tokens {
+        let r#static = if func.is_static {
+            quote!(static #<space>)
+        } else {
+            quote!()
+        };
+        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
+        quote! {
+            #r#static#(&func.name)(#args): #(self.generate_return_type(func.ret.as_ref()));
+        }
+    }
+    fn generate_return_type(&self, ret: Option<&AbiType>) -> js::Tokens {
+        if let Some(ret) = ret {
+            match ret {
+                AbiType::Prim(prim) => match prim {
+                    PrimType::U8
+                    | PrimType::U16
+                    | PrimType::U32
+                    | PrimType::Usize
+                    | PrimType::I8
+                    | PrimType::I16
+                    | PrimType::I32
+                    | PrimType::Isize
+                    | PrimType::F32
+                    | PrimType::F64 => quote!(number),
+                    PrimType::U64 | PrimType::I64 => quote!(BigInt),
+                    PrimType::Bool => quote!(boolean),
+                },
+                AbiType::RefStr | AbiType::String => quote!(string),
+                AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
+                    // TODO String etcs
+                    quote!(Array<#(&self.generate_return_type(Some(&AbiType::Prim(*prim))))>)
+                }
+                AbiType::Box(i) | AbiType::Ref(i) | AbiType::Object(i) => quote!(#(i)),
+            }
+        } else {
+            quote!(void)
+        }
+    }
+    fn generate_object(&self, obj: AbiObject) -> js::Tokens {
+        quote! {
+            export class #(&obj.name) {
+                constructor(api: Api, box: Box);
+
+
+                #(for method in obj.methods join (#<line>#<line>) => #(self.generate_function(method)))
+            }
+        }
+    }
+}
+
 impl JsGenerator {
     pub fn generate(&self, iface: Interface) -> js::Tokens {
         quote! {
@@ -475,6 +547,18 @@ pub mod test_runner {
 
         let test = TestCases::new();
         test.pass(runner_file.as_ref());
+        Ok(())
+    }
+
+    pub fn compile_pass_ts(iface: &str, ts_tokens: js::Tokens) -> Result<()> {
+        let iface = Interface::parse(iface)?;
+        let ts_gen = TsGenerator::default();
+        let js_tokens = ts_gen.generate(iface);
+
+        assert_eq!(
+            js_tokens.to_file_string().unwrap(),
+            ts_tokens.to_file_string().unwrap()
+        );
         Ok(())
     }
 
