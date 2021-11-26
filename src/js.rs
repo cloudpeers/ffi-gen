@@ -183,6 +183,7 @@ impl JsGenerator {
 
     fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
+            AbiType::Prim(PrimType::Bool) => quote!(const #(name)_int = #name ? 1 : 0;),
             AbiType::Prim(_) => quote!(),
             AbiType::RefStr | AbiType::String => quote! {
                 const #(name)_ptr = #api.allocate(#name.length, 1);
@@ -207,6 +208,7 @@ impl JsGenerator {
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
+            AbiType::Prim(PrimType::Bool) => quote!(#(name)_int,),
             AbiType::Prim(_) => quote!(#name,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
@@ -239,6 +241,7 @@ impl JsGenerator {
     fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
+                AbiType::Prim(PrimType::Bool) => quote!(const ret_bool = ret > 0;),
                 AbiType::Prim(_) => quote!(),
                 AbiType::RefStr => quote! {
                     const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
@@ -297,6 +300,7 @@ impl JsGenerator {
     fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
+                AbiType::Prim(PrimType::Bool) => quote!(return ret_bool;),
                 AbiType::Prim(_) => quote!(return ret;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
