@@ -38,7 +38,14 @@ impl TsGenerator {
         } else {
             quote!()
         };
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
+        let wrap_in_promise_begin = if func.is_async {
+            quote!(Promise<)
+        } else {
+            quote!()
+        };
+        // TODO: nested Promises
+        let wrap_in_promise_end = if func.is_async { quote!(>) } else { quote!() };
+        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(&wrap_in_promise_begin)#(self.generate_return_type(Some(ty)))#(&wrap_in_promise_end)));
         quote! {
             #r#static#(&func.name)(#args): #(self.generate_return_type(func.ret.as_ref()));
         }
