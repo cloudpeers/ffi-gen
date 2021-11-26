@@ -39,19 +39,12 @@ impl TsGenerator {
         } else {
             quote!()
         };
-        let wrap_in_promise_begin = if func.is_async {
-            quote!(Promise<)
-        } else {
-            quote!()
-        };
-        // TODO: nested Promises
-        let wrap_in_promise_end = if func.is_async { quote!(>) } else { quote!() };
         let api_arg = if func.is_static {
             quote!(api: Api, #<space>)
         } else {
             quote!()
         };
-        let args = quote!(#(api_arg)#(for (name, ty) in &func.args join (, ) => #name: #(&wrap_in_promise_begin)#(self.generate_return_type(Some(ty)))#(&wrap_in_promise_end)));
+        let args = quote!(#(api_arg)#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
         quote! {
             #r#static#(&func.name)(#args): #(self.generate_return_type(func.ret.as_ref()));
         }
@@ -79,6 +72,10 @@ impl TsGenerator {
                     quote!(Array<#(&self.generate_return_type(Some(&AbiType::Prim(*prim))))>)
                 }
                 AbiType::RefObject(i) | AbiType::Object(i) => quote!(#(i)),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!(void)
@@ -288,6 +285,10 @@ impl JsGenerator {
             }
             AbiType::RefObject(_) => quote!(const #(name)_ptr = #(name).box.borrow();),
             AbiType::Object(_) => quote!(const #(name)_ptr = #(name).box.move();),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -298,6 +299,10 @@ impl JsGenerator {
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
             AbiType::Object(_) | AbiType::RefObject(_) => quote!(#(name)_ptr,),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -318,6 +323,10 @@ impl JsGenerator {
                 }
             }
             AbiType::Object(_) | AbiType::RefObject(_) => quote!(),
+            AbiType::Option(_) => todo!(),
+            AbiType::Result(_) => todo!(),
+            AbiType::Future(_) => todo!(),
+            AbiType::Stream(_) => todo!(),
         }
     }
 
@@ -367,6 +376,10 @@ impl JsGenerator {
                         const ret_obj = new #ident(#api, ret_box);
                     }
                 }
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!()
@@ -382,6 +395,10 @@ impl JsGenerator {
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
                 AbiType::RefObject(_) => unreachable!(),
                 AbiType::Object(_) => quote!(return ret_obj;),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             quote!()
@@ -452,6 +469,10 @@ impl WasmMultiValueShim {
                 }
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
+                AbiType::Option(_) => todo!(),
+                AbiType::Result(_) => todo!(),
+                AbiType::Future(_) => todo!(),
+                AbiType::Stream(_) => todo!(),
             }
         } else {
             None

@@ -141,21 +141,16 @@ impl Function {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FunctionType {
-    pub is_async: bool,
     pub args: Vec<(String, Type)>,
     pub ret: Option<Type>,
 }
 
 impl FunctionType {
     pub fn parse(pair: Pair<Rule>) -> Result<Self> {
-        let mut is_async = false;
         let mut args = vec![];
         let mut ret = None;
         for pair in pair.into_inner() {
             match pair.as_rule() {
-                Rule::async_ => {
-                    is_async = true;
-                }
                 Rule::args => {
                     for pair in pair.into_inner() {
                         if pair.as_rule() == Rule::arg {
@@ -182,11 +177,7 @@ impl FunctionType {
                 _ => {}
             }
         }
-        Ok(Self {
-            is_async,
-            args,
-            ret,
-        })
+        Ok(Self { args, ret })
     }
 }
 
@@ -206,15 +197,14 @@ pub enum Type {
     F32,
     F64,
     String,
+    Ref(Box<Type>),
     Ident(String),
-    Box(Box<Type>),
     Slice(Box<Type>),
     Vec(Box<Type>),
     Option(Box<Type>),
     Result(Box<Type>),
-    Ref(Box<Type>),
-    Mut(Box<Type>),
-    Fn(Box<FunctionType>),
+    Future(Box<Type>),
+    Stream(Box<Type>),
 }
 
 impl Type {
@@ -239,15 +229,14 @@ impl Type {
                 _ => unreachable!(),
             },
             Rule::ident => Type::Ident(pair.as_str().to_string()),
-            Rule::box_
-            | Rule::slice
+            Rule::slice
             | Rule::vec
             | Rule::opt
             | Rule::res
             | Rule::ref_
-            | Rule::mut_ => {
+            | Rule::fut
+            | Rule::stream => {
                 let first = pair.as_str().chars().next().unwrap();
-                let second = pair.as_str().chars().nth(1).unwrap();
                 let mut inner = None;
                 for pair in pair.into_inner() {
                     if pair.as_rule() == Rule::type_ {
@@ -256,22 +245,16 @@ impl Type {
                 }
                 let inner = inner.unwrap();
                 match first {
-                    'B' => Type::Box(inner),
                     '[' => Type::Slice(inner),
                     'V' => Type::Vec(inner),
                     'O' => Type::Option(inner),
                     'R' => Type::Result(inner),
-                    '&' => {
-                        if second == 'm' {
-                            Type::Mut(inner)
-                        } else {
-                            Type::Ref(inner)
-                        }
-                    }
+                    '&' => Type::Ref(inner),
+                    'F' => Type::Future(inner),
+                    'S' => Type::Stream(inner),
                     _ => unreachable!(),
                 }
             }
-            Rule::function_type => Type::Fn(Box::new(FunctionType::parse(pair)?)),
             r => unreachable!("{:?}", r),
         })
     }
@@ -300,7 +283,6 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: false,
                         args: vec![],
                         ret: None,
                     }
@@ -316,7 +298,6 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: false,
                         args: vec![("a".to_string(), Type::U8)],
                         ret: None,
                     }
@@ -332,7 +313,6 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: false,
                         args: vec![],
                         ret: Some(Type::U8),
                     }
@@ -348,7 +328,6 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: false,
                         args: vec![("a".to_string(), Type::Ref(Box::new(Type::String)))],
                         ret: None,
                     }
@@ -364,7 +343,6 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: false,
                         args: vec![(
                             "a".to_string(),
                             Type::Ref(Box::new(Type::Slice(Box::new(Type::U8))))
@@ -375,7 +353,7 @@ mod tests {
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello async fn();")?;
+        let res = Interface::parse("hello fn() -> Future<u8>;")?;
         assert_eq!(
             res,
             Interface {
@@ -383,16 +361,15 @@ mod tests {
                 functions: vec![Function {
                     ident: "hello".to_string(),
                     ty: FunctionType {
-                        is_async: true,
                         args: vec![],
-                        ret: None,
+                        ret: Some(Type::Future(Box::new(Type::U8))),
                     }
                 }],
                 idents: Default::default(),
             }
         );
         let res = Interface::parse(
-            "object Greeter { static new fn() -> Box<Greeter>; greet fn() -> string; }",
+            "object Greeter { static new fn() -> Greeter; greet fn() -> string; }",
         )?;
         assert_eq!(
             res,
@@ -406,11 +383,8 @@ mod tests {
                             func: Function {
                                 ident: "new".to_string(),
                                 ty: FunctionType {
-                                    is_async: false,
                                     args: vec![],
-                                    ret: Some(Type::Box(Box::new(Type::Ident(
-                                        "Greeter".to_string()
-                                    )))),
+                                    ret: Some(Type::Ident("Greeter".to_string())),
                                 }
                             }
                         },
@@ -419,7 +393,6 @@ mod tests {
                             func: Function {
                                 ident: "greet".to_string(),
                                 ty: FunctionType {
-                                    is_async: false,
                                     args: vec![],
                                     ret: Some(Type::String),
                                 }

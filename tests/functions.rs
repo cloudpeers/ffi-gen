@@ -337,3 +337,23 @@ compile_pass! {
     })
 
 }
+
+compile_pass! {
+    args_opt_i64_ret_opt_i64,
+    "identity fn(arg: Option<i64>) -> Option<i64>;",
+    (
+        pub fn identity(opt: Option<i64>) -> Option<i64> {
+            opt
+        }
+    ),
+    ( ),
+    (
+        //assert(api.identity(null) == null);
+        //assert(api.identity(42)! == 42);
+    ),
+    (
+        //assert.equals(api.identity(null), null);
+        //assert.equals(api.identity(42), 42);
+    ),
+    ( )
+}

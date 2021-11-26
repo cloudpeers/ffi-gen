@@ -2,8 +2,7 @@ ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 arg = { ident ~ ":" ~ type_ }
 args = { (arg ~ ("," ~ arg)*)? }
-async_ = { "async" }
-function_type = { async_? ~ "fn" ~ "(" ~ args ~ ")" ~ ("->" ~ type_)? }
+function_type = { "fn" ~ "(" ~ args ~ ")" ~ ("->" ~ type_)? }
 
 primitive = {
     "u8" | "u16" | "u32" | "u64" | "usize" |
@@ -11,14 +10,14 @@ primitive = {
     "bool" | "f32" | "f64" | "string"
 }
 ref_ = { "&" ~ type_ }
-mut_ = { "&mut" ~ type_ }
 slice = { "[" ~ type_ ~ "]" }
-box_ = { "Box" ~ "<" ~ type_ ~ ">" }
 vec = { "Vec" ~ "<" ~ type_ ~ ">" }
 opt = { "Option" ~ "<" ~ type_ ~ ">" }
 res = { "Result" ~ "<" ~ type_ ~ ">" }
+fut = { "Future" ~ "<" ~ type_ ~ ">" }
+stream = { "Stream" ~ "<" ~ type_ ~ ">" }
 
-type_ = { primitive | mut_ | ref_ | slice | box_ | vec | opt | res | function_type | ident }
+type_ = { primitive | ref_ | slice | vec | opt | res | fut | stream | ident }
 
 static_ = { "static" }
 method = { static_? ~ function }
