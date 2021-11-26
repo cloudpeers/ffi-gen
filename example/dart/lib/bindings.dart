@@ -154,6 +154,10 @@ class Api {
     this._deallocate(pointer.cast(), byteCount, alignment);
   }
 
+  ffi.Pointer<T> lookup<T extends ffi.NativeType>(String symbolName) {
+      return _lookup(symbolName);
+  }
+
   void hello_world() {
     final ret = this._hello_world();
   }

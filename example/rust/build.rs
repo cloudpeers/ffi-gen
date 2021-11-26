@@ -2,7 +2,7 @@ use ffi_gen::{DartGenerator, Interface, JsGenerator};
 use std::process::Command;
 
 fn main() {
-    let path = "./api.rsh";
+    /*let path = "./api.rsh";
     println!("cargo:rerun-if-changed={}", path);
     let s = std::fs::read_to_string(path).unwrap();
     let iface = Interface::parse(&s).unwrap();
@@ -25,5 +25,5 @@ fn main() {
         .status()
         .unwrap()
         .success();
-    assert!(ret);
+    assert!(ret);*/
 }
