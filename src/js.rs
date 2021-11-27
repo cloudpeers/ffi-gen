@@ -540,6 +540,7 @@ pub mod test_runner {
                 #wasm_multi_value
                 let ret = Command::new("node")
                     .arg("--expose-gc")
+                    .arg("--unhandled-rejections=strict")
                     .arg(#(quoted(js_file.as_ref().to_str().unwrap())))
                     .status()
                     .expect("Running node")
