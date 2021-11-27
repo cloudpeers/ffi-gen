@@ -1,4 +1,4 @@
-use crate::{Abi, AbiFunction, AbiObject, AbiType, Interface, PrimType};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FfiType, FunctionType, Interface, NumType};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -7,7 +7,9 @@ pub struct JsGenerator {
 
 impl Default for JsGenerator {
     fn default() -> Self {
-        Self { abi: Abi::Wasm(32) }
+        Self {
+            abi: Abi::Wasm(FfiType::I32),
+        }
     }
 }
 
@@ -34,42 +36,39 @@ impl TsGenerator {
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let r#static = if func.is_static {
-            quote!(static #<space>)
-        } else {
-            quote!()
-        };
-        let api_arg = if func.is_static {
-            quote!(api: Api, #<space>)
-        } else {
-            quote!()
-        };
-        let args = quote!(#(api_arg)#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
-        quote! {
-            #r#static#(&func.name)(#args): #(self.generate_return_type(func.ret.as_ref()));
+        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
+        let ret = self.generate_return_type(func.ret.as_ref());
+        match &func.ty {
+            FunctionType::Constructor(_) => {
+                quote!(static #(&func.name)(api: Api, #args): #ret;)
+            }
+            _ => {
+                quote!(#(&func.name)#args: #ret;)
+            }
         }
     }
+
     fn generate_return_type(&self, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(prim) => match prim {
-                    PrimType::U8
-                    | PrimType::U16
-                    | PrimType::U32
-                    | PrimType::Usize
-                    | PrimType::I8
-                    | PrimType::I16
-                    | PrimType::I32
-                    | PrimType::Isize
-                    | PrimType::F32
-                    | PrimType::F64 => quote!(number),
-                    PrimType::U64 | PrimType::I64 => quote!(BigInt),
+                AbiType::Num(prim) => match prim {
+                    NumType::U8
+                    | NumType::U16
+                    | NumType::U32
+                    | NumType::Usize
+                    | NumType::I8
+                    | NumType::I16
+                    | NumType::I32
+                    | NumType::Isize
+                    | NumType::F32
+                    | NumType::F64 => quote!(number),
+                    NumType::U64 | NumType::I64 => quote!(BigInt),
                 },
                 AbiType::Bool => quote!(boolean),
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
                     // TODO String etcs
-                    quote!(Array<#(&self.generate_return_type(Some(&AbiType::Prim(*prim))))>)
+                    quote!(Array<#(&self.generate_return_type(Some(&AbiType::Num(*prim))))>)
                 }
                 AbiType::RefObject(i) | AbiType::Object(i) => quote!(#(i)),
                 AbiType::Option(_) => todo!(),
@@ -266,7 +265,7 @@ impl JsGenerator {
 
     fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(_) => quote!(),
+            AbiType::Num(_) => quote!(),
             AbiType::Bool => quote!(const #(name)_int = #name ? 1 : 0;),
             AbiType::RefStr | AbiType::String => quote! {
                 const #(name)_ptr = #api.allocate(#name.length, 1);
@@ -294,7 +293,7 @@ impl JsGenerator {
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(_) => quote!(#name,),
+            AbiType::Num(_) => quote!(#name,),
             AbiType::Bool => quote!(#(name)_int,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
             AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
@@ -308,7 +307,7 @@ impl JsGenerator {
 
     fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> js::Tokens {
         match ty {
-            AbiType::Prim(_) | AbiType::Bool | AbiType::String | AbiType::Vec(_) => quote!(),
+            AbiType::Num(_) | AbiType::Bool | AbiType::String | AbiType::Vec(_) => quote!(),
             AbiType::RefStr => quote! {
                 if (#name.length > 0) {
                     this.deallocate(#(name)_ptr, #name.length, 1);
@@ -333,7 +332,7 @@ impl JsGenerator {
     fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) => quote!(),
+                AbiType::Num(_) => quote!(),
                 AbiType::Bool => quote!(const ret_bool = ret > 0;),
                 AbiType::RefStr => quote! {
                     const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
@@ -389,7 +388,7 @@ impl JsGenerator {
     fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) => quote!(return ret;),
+                AbiType::Num(_) => quote!(return ret;),
                 AbiType::Bool => quote!(return ret_bool;),
                 AbiType::RefStr | AbiType::String => quote!(return ret_str;),
                 AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
@@ -405,20 +404,20 @@ impl JsGenerator {
         }
     }
 
-    fn generate_array(&self, ty: PrimType) -> js::Tokens {
+    fn generate_array(&self, ty: NumType) -> js::Tokens {
         match ty {
-            PrimType::U8 => quote!(Uint8Array),
-            PrimType::U16 => quote!(Uint16Array),
-            PrimType::U32 => quote!(Uint32Array),
-            PrimType::U64 => quote!(BigUint64Array),
-            PrimType::Usize => quote!(Uint32Array),
-            PrimType::I8 => quote!(Int8Array),
-            PrimType::I16 => quote!(Int16Array),
-            PrimType::I32 => quote!(Int32Array),
-            PrimType::I64 => quote!(BigInt64Array),
-            PrimType::Isize => quote!(Int32Array),
-            PrimType::F32 => quote!(Float32Array),
-            PrimType::F64 => quote!(Float64Array),
+            NumType::U8 => quote!(Uint8Array),
+            NumType::U16 => quote!(Uint16Array),
+            NumType::U32 => quote!(Uint32Array),
+            NumType::U64 => quote!(BigUint64Array),
+            NumType::Usize => quote!(Uint32Array),
+            NumType::I8 => quote!(Int8Array),
+            NumType::I16 => quote!(Int16Array),
+            NumType::I32 => quote!(Int32Array),
+            NumType::I64 => quote!(BigInt64Array),
+            NumType::Isize => quote!(Int32Array),
+            NumType::F32 => quote!(Float32Array),
+            NumType::F64 => quote!(Float64Array),
         }
     }
 }
@@ -453,7 +452,14 @@ impl WasmMultiValueShim {
 
     fn generate_args(iface: Interface) -> Vec<String> {
         let mut funcs = vec![];
-        for func in iface.into_functions() {
+        for obj in iface.objects() {
+            for func in &obj.methods {
+                if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
+                    funcs.push(format!("\"__{} {}\"", &func.name, ret))
+                }
+            }
+        }
+        for func in iface.functions() {
             if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
                 funcs.push(format!("\"__{} {}\"", &func.name, ret))
             }
@@ -464,7 +470,7 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) | AbiType::Bool | AbiType::RefObject(_) | AbiType::Object(_) => {
+                AbiType::Num(_) | AbiType::Bool | AbiType::RefObject(_) | AbiType::Object(_) => {
                     None
                 }
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),

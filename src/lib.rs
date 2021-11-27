@@ -1,6 +1,6 @@
 mod abi;
 //mod dart;
-//mod js;
+mod js;
 mod parser;
 mod rust;
 
@@ -8,7 +8,7 @@ pub use abi::{
     Abi, AbiFunction, AbiObject, AbiType, FfiFunction, FfiType, FunctionType, Instr, NumType,
 };
 //pub use dart::DartGenerator;
-//pub use js::{JsGenerator, TsGenerator, WasmMultiValueShim};
+pub use js::{JsGenerator, TsGenerator, WasmMultiValueShim};
 pub use parser::Interface;
 pub use rust::RustGenerator;
 
