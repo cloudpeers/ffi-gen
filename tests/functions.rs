@@ -164,6 +164,29 @@ compile_pass! {
 }
 
 compile_pass! {
+    no_args_ret_u64,
+    "u64_max fn() -> u64;",
+    (
+        pub fn u64_max() -> u64 {
+            u64::MAX
+        }
+    ),
+    ( ),
+    ( assert(api.u64_max() == 0xffffffffffffffff); ),
+    ( assert.equal(api.u64_max(), 0xffff_ffff_ffff_ffffn); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        u64_max(): BigInt;
+
+        drop(): void;
+    })
+}
+
+compile_pass! {
     args_string_ret_usize,
     "strlen fn(arg: string) -> usize;",
     (
