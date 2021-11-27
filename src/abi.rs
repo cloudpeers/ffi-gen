@@ -1,4 +1,4 @@
-use crate::{Interface, Type};
+use crate::parser::{Interface, Type};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FfiType {
@@ -439,6 +439,7 @@ impl Abi {
                 return_.push(Instr::ReturnVoid);
             }
         }
+        #[allow(clippy::drop_copy)]
         drop(ident);
         instr.extend(cleanup);
         instr.extend(return_);

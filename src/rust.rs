@@ -1,4 +1,4 @@
-use crate::{Abi, AbiFunction, AbiType, Interface, PrimType};
+use crate::{Abi, AbiFunction, AbiType, FfiType, FunctionType, Interface, NumType};
 use genco::prelude::*;
 use std::collections::HashSet;
 
@@ -82,7 +82,7 @@ impl RustGenerator {
                 std::alloc::dealloc(ptr, layout);
             }
 
-            #(for func in iface.into_functions() => #(self.generate_function(func)))
+            #(for func in iface.functions() => #(self.generate_function(func)))
 
             #(for dest in &self.destructors => #(self.generate_destructor(dest)))
         }
@@ -106,32 +106,34 @@ impl RustGenerator {
     }
 
     fn generate_func_name(&self, func: &AbiFunction) -> String {
-        if let Some(object) = func.object.as_ref() {
-            format!("__{}_{}", object, &func.name)
-        } else {
-            format!("__{}", &func.name)
+        match &func.ty {
+            FunctionType::Constructor(object) | FunctionType::Method(object) => {
+                format!("__{}_{}", object, &func.name)
+            }
+            FunctionType::Function => format!("__{}", &func.name),
         }
     }
 
     fn generate_invoke(&self, func: &AbiFunction) -> rust::Tokens {
-        if let Some(object) = func.object.as_ref() {
-            if func.is_static {
+        match &func.ty {
+            FunctionType::Constructor(object) => {
                 quote!(#(object)::#(&func.name))
-            } else {
+            }
+            FunctionType::Method(_) => {
                 quote!(__self.#(&func.name))
             }
-        } else {
-            quote!(#(&func.name))
+            FunctionType::Function => {
+                quote!(#(&func.name))
+            }
         }
     }
 
     fn generate_self(&self, func: &AbiFunction) -> rust::Tokens {
-        if let Some(object) = func.object.as_ref() {
-            if !func.is_static {
-                return quote!(__self: &#object,);
-            }
+        if let FunctionType::Method(object) = &func.ty {
+            quote!(__self: &#object,)
+        } else {
+            quote!()
         }
-        quote!()
     }
 
     fn generate_destructor(&self, boxed: &str) -> rust::Tokens {
@@ -150,7 +152,7 @@ impl RustGenerator {
 
     fn generate_arg(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
-            AbiType::Prim(ty) => quote!(#name: #(self.generate_prim_type(*ty)),),
+            AbiType::Num(ty) => quote!(#name: #(self.generate_prim_type(*ty)),),
             AbiType::Bool => quote!(#name: bool,),
             AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                 #(name)_ptr: #(self.generate_isize()),
@@ -175,7 +177,7 @@ impl RustGenerator {
 
     fn generate_lift(&self, name: &str, ty: &AbiType) -> rust::Tokens {
         match ty {
-            AbiType::Prim(_) | AbiType::Bool => quote!(let #(name) = #(name) as _;),
+            AbiType::Num(_) | AbiType::Bool => quote!(let #(name) = #(name) as _;),
             AbiType::RefSlice(ty) => quote! {
                 let #name: &[#(self.generate_prim_type(*ty))] =
                     unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
@@ -233,14 +235,16 @@ impl RustGenerator {
 
     fn generate_return_type(&self, ret: &AbiType) -> rust::Tokens {
         match ret {
-            AbiType::Prim(ty) => self.generate_prim_type(*ty),
+            AbiType::Num(ty) => self.generate_prim_type(*ty),
             AbiType::Bool => quote!(bool),
             AbiType::RefStr | AbiType::RefSlice(_) => self.generate_slice(),
             AbiType::String | AbiType::Vec(_) => self.generate_alloc(),
             AbiType::Object(ident) => quote!(Box<#ident>),
             AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
             AbiType::Option(ty) => quote!(FfiOption<#(self.generate_return_type(ty))>),
-            AbiType::Result(ty) => quote!(FfiResult<#(self.generate_return_type(ty)), #(self.generate_alloc())>),
+            AbiType::Result(ty) => {
+                quote!(FfiResult<#(self.generate_return_type(ty)), #(self.generate_alloc())>)
+            }
             AbiType::Future(ty) => {
                 quote!(Box<dyn Future<Output = #(self.generate_return_type(ty))> + Send + Unpin + 'static>)
             }
@@ -253,7 +257,7 @@ impl RustGenerator {
     fn generate_lower(&self, ret: Option<&AbiType>) -> rust::Tokens {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Prim(_) | AbiType::Bool => quote!(ret as _),
+                AbiType::Num(_) | AbiType::Bool => quote!(ret as _),
                 AbiType::RefStr | AbiType::RefSlice(_) => quote! {
                     #(self.generate_slice()) {
                         ptr: ret.as_ptr() as _,
@@ -301,51 +305,51 @@ impl RustGenerator {
         }
     }
 
-    fn generate_prim_type(&self, ty: PrimType) -> rust::Tokens {
+    fn generate_prim_type(&self, ty: NumType) -> rust::Tokens {
         match ty {
-            PrimType::U8 => quote!(u8),
-            PrimType::U16 => quote!(u16),
-            PrimType::U32 => quote!(u32),
-            PrimType::U64 => quote!(u64),
-            PrimType::Usize => quote!(usize),
-            PrimType::I8 => quote!(i8),
-            PrimType::I16 => quote!(i16),
-            PrimType::I32 => quote!(i32),
-            PrimType::I64 => quote!(i64),
-            PrimType::Isize => quote!(isize),
-            PrimType::F32 => quote!(f32),
-            PrimType::F64 => quote!(f64),
+            NumType::U8 => quote!(u8),
+            NumType::U16 => quote!(u16),
+            NumType::U32 => quote!(u32),
+            NumType::U64 => quote!(u64),
+            NumType::Usize => quote!(usize),
+            NumType::I8 => quote!(i8),
+            NumType::I16 => quote!(i16),
+            NumType::I32 => quote!(i32),
+            NumType::I64 => quote!(i64),
+            NumType::Isize => quote!(isize),
+            NumType::F32 => quote!(f32),
+            NumType::F64 => quote!(f64),
         }
     }
 
     fn generate_usize(&self) -> rust::Tokens {
-        match self.abi.ptr_width() {
-            32 => quote!(u32),
-            64 => quote!(u64),
+        match self.abi.ptr() {
+            FfiType::I32 => quote!(u32),
+            FfiType::I64 => quote!(u64),
             _ => unimplemented!(),
         }
     }
 
     fn generate_isize(&self) -> rust::Tokens {
-        match self.abi.ptr_width() {
-            32 => quote!(i32),
-            64 => quote!(i64),
+        match self.abi.ptr() {
+            FfiType::I32 => quote!(i32),
+            FfiType::I64 => quote!(i64),
             _ => unimplemented!(),
         }
     }
 
     fn generate_slice(&self) -> rust::Tokens {
-        match self.abi.ptr_width() {
-            32 => quote!(Slice32),
-            64 => quote!(Slice64),
+        match self.abi.ptr() {
+            FfiType::I32 => quote!(Slice32),
+            FfiType::I64 => quote!(Slice64),
             _ => unimplemented!(),
         }
     }
 
     fn generate_alloc(&self) -> rust::Tokens {
-        match self.abi.ptr_width() {
-            32 => quote!(Alloc32),
-            64 => quote!(Alloc64),
+        match self.abi.ptr() {
+            FfiType::I32 => quote!(Alloc32),
+            FfiType::I64 => quote!(Alloc64),
             _ => unimplemented!(),
         }
     }
