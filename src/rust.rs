@@ -17,44 +17,6 @@ impl RustGenerator {
 
     pub fn generate(&mut self, iface: Interface) -> rust::Tokens {
         quote! {
-            #[repr(C)]
-            pub struct Slice32 {
-                pub ptr: i32,
-                pub len: u32,
-            }
-
-            #[repr(C)]
-            pub struct Slice64 {
-                pub ptr: i64,
-                pub len: u64,
-            }
-
-            #[repr(C)]
-            pub struct Alloc32 {
-                pub ptr: i32,
-                pub len: u32,
-                pub cap: u32,
-            }
-
-            #[repr(C)]
-            pub struct Alloc64 {
-                pub ptr: i64,
-                pub len: u64,
-                pub cap: u64,
-            }
-
-            #[repr(C)]
-            pub enum FfiOption<T> {
-                Some(T),
-                None,
-            }
-
-            #[repr(C)]
-            pub enum FfiResult<T, E> {
-                Ok(T),
-                Err(E),
-            }
-
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
             pub fn panic_abort<R>(func: impl FnOnce() -> R + std::panic::UnwindSafe) -> R {
@@ -89,14 +51,12 @@ impl RustGenerator {
         }
     }
 
-    fn generate_function(&mut self, func: AbiFunction) -> rust::Tokens {
+    fn generate_function(&mut self, func: &AbiFunction) -> rust::Tokens {
+        let ffi = self.abi.lower_func(&func);
+
         quote! {
             #[no_mangle]
-            pub extern "C" fn #(self.generate_func_name(&func))(
-                #(self.generate_self(&func))
-                #(for (name, ty) in &func.args => #(self.generate_arg(name, ty)))
-            ) #(self.generate_return(func.ret.as_ref()))
-            {
+            pub extern "C" fn #(&ffi.symbol)(#(for (name, ty) in &ffi.args => #name: #ty,)) {
                 panic_abort(move || {
                     #(for (name, ty) in &func.args => #(self.generate_lift(name, ty)))
                     let ret = #(self.generate_invoke(&func))(#(for (name, _) in &func.args => #name,));
@@ -306,7 +266,7 @@ impl RustGenerator {
         }
     }
 
-    fn generate_prim_type(&self, ty: NumType) -> rust::Tokens {
+    fn generate_num_type(&self, ty: NumType) -> rust::Tokens {
         match ty {
             NumType::U8 => quote!(u8),
             NumType::U16 => quote!(u16),
@@ -335,22 +295,6 @@ impl RustGenerator {
         match self.abi.ptr() {
             FfiType::I32 => quote!(i32),
             FfiType::I64 => quote!(i64),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn generate_slice(&self) -> rust::Tokens {
-        match self.abi.ptr() {
-            FfiType::I32 => quote!(Slice32),
-            FfiType::I64 => quote!(Slice64),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn generate_alloc(&self) -> rust::Tokens {
-        match self.abi.ptr() {
-            FfiType::I32 => quote!(Alloc32),
-            FfiType::I64 => quote!(Alloc64),
             _ => unimplemented!(),
         }
     }
