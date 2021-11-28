@@ -3,7 +3,7 @@ export class Api {
 
   fetch(url, imports): Promise<void>;
 
-  hello_world(): void;
+  hello_world: void;
 
   drop(): void;
 }

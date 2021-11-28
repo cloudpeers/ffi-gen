@@ -7,23 +7,6 @@ import "dart:ffi" as ffi;
 import "dart:io" show Platform;
 import "dart:typed_data";
 
-class _Slice extends ffi.Struct {
-  external ffi.Pointer<ffi.Uint8> ptr;
-
-  @ffi.IntPtr()
-  external int len;
-}
-
-class _Alloc extends ffi.Struct {
-  external ffi.Pointer<ffi.Uint8> ptr;
-
-  @ffi.IntPtr()
-  external int len;
-
-  @ffi.IntPtr()
-  external int cap;
-}
-
 ffi.Pointer<ffi.Void> _registerFinalizer(Box boxed) {
   final dart = ffi.DynamicLibrary.executable();
   final registerPtr = dart.lookup<
@@ -67,17 +50,17 @@ class Box {
   late final _drop = _dropPtr.asFunction<
       void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>();
 
-  ffi.Pointer<ffi.Void> borrow() {
+  int borrow() {
     if (this._dropped) {
       throw new StateError("use after free");
     }
     if (this._moved) {
       throw new StateError("use after move");
     }
-    return this._ptr;
+    return this._ptr.address;
   }
 
-  ffi.Pointer<ffi.Void> move() {
+  int move() {
     if (this._dropped) {
       throw new StateError("use after free");
     }
@@ -86,7 +69,7 @@ class Box {
     }
     this._moved = true;
     _unregisterFinalizer(this);
-    return this._ptr;
+    return this._ptr.address;
   }
 
   void drop() {
@@ -155,7 +138,8 @@ class Api {
   }
 
   void hello_world() {
-    final ret = this._hello_world();
+    final tmp0 = this.__hello_world();
+    return;
   }
 
   late final _allocatePtr = _lookup<
@@ -173,8 +157,8 @@ class Api {
   late final _deallocate =
       _deallocatePtr.asFunction<Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
-  late final _hello_worldPtr =
+  late final __hello_worldPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function()>>("__hello_world");
 
-  late final _hello_world = _hello_worldPtr.asFunction<void Function()>();
+  late final __hello_world = __hello_worldPtr.asFunction<void Function()>();
 }

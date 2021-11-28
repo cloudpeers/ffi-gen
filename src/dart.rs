@@ -194,7 +194,7 @@ impl DartGenerator {
     }
 
     fn generate_function(&self, func: &AbiFunction) -> dart::Tokens {
-        let ffi = self.abi.lower_func(&func);
+        let ffi = self.abi.lower_func(func);
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this._api),
