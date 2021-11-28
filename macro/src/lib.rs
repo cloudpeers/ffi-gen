@@ -1,4 +1,4 @@
-use ffi_gen::{Abi, Interface, RustGenerator};
+use ffi_gen::{Abi, FfiType, Interface, RustGenerator};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -18,22 +18,22 @@ pub fn ffi_gen(input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn ffi_gen_wasm_32(input: TokenStream, _: TokenStream) -> TokenStream {
-    inner_ffi_gen(input, Abi::Wasm(32))
+    inner_ffi_gen(input, Abi::Wasm(FfiType::I32))
 }
 
 #[proc_macro_attribute]
 pub fn ffi_gen_wasm_64(input: TokenStream, _: TokenStream) -> TokenStream {
-    inner_ffi_gen(input, Abi::Wasm(64))
+    inner_ffi_gen(input, Abi::Wasm(FfiType::I64))
 }
 
 #[proc_macro_attribute]
 pub fn ffi_gen_native_32(input: TokenStream, _: TokenStream) -> TokenStream {
-    inner_ffi_gen(input, Abi::Native(32))
+    inner_ffi_gen(input, Abi::Native(FfiType::I32))
 }
 
 #[proc_macro_attribute]
 pub fn ffi_gen_native_64(input: TokenStream, _: TokenStream) -> TokenStream {
-    inner_ffi_gen(input, Abi::Native(64))
+    inner_ffi_gen(input, Abi::Native(FfiType::I64))
 }
 
 fn inner_ffi_gen(input: TokenStream, abi: Abi) -> TokenStream {

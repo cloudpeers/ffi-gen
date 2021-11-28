@@ -100,7 +100,8 @@ class Api {
   }
 
   hello_world() {
-    const ret = this.instance.exports.__hello_world();
+    const tmp0 = this.instance.exports.__hello_world();
+    return;
   }
 }
 
