@@ -338,7 +338,7 @@ compile_pass! {
 
 }
 
-compile_pass! {
+/*compile_pass! {
     args_opt_i64_ret_opt_i64,
     "identity fn(arg: Option<i64>) -> Option<i64>;",
     (
@@ -356,4 +356,4 @@ compile_pass! {
         //assert.equals(api.identity(42), 42);
     ),
     ( )
-}
+}*/

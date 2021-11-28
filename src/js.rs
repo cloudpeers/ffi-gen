@@ -1,4 +1,6 @@
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FfiType, FunctionType, Interface, NumType};
+use crate::{
+    Abi, AbiFunction, AbiObject, AbiType, FfiType, FunctionType, Instr, Interface, NumType,
+};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -198,7 +200,7 @@ impl JsGenerator {
                     this.instance.exports[symbol](0, ptr);
                 }
 
-                #(for func in iface.functions() => #(self.generate_function(func)))
+                #(for func in iface.functions() => #(self.generate_function(&func)))
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -218,7 +220,7 @@ impl JsGenerator {
                     this.box = box;
                 }
 
-                #(for method in obj.methods => #(self.generate_function(method)))
+                #(for method in obj.methods => #(self.generate_function(&method)))
 
                 drop() {
                     this.box.drop();
@@ -227,181 +229,100 @@ impl JsGenerator {
         }
     }
 
-    fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let api_arg = if func.is_static {
-            quote!(api,)
-        } else {
-            quote!()
+    fn generate_function(&self, func: &AbiFunction) -> js::Tokens {
+        let ffi = self.abi.lower_func(&func);
+        let api = match &func.ty {
+            FunctionType::Constructor(_) => quote!(api),
+            FunctionType::Method(_) => quote!(this.api),
+            FunctionType::Function => quote!(this),
         };
-        let api = if func.object.is_some() && func.is_static {
-            quote!(api)
-        } else if func.object.is_some() {
-            quote!(this.api)
-        } else {
-            quote!(this)
-        };
-        let self_arg = if func.needs_self() {
-            quote!(this.box.borrow(),)
-        } else {
-            quote!()
-        };
-        let static_ = if func.is_static {
-            quote!(static)
-        } else {
-            quote!()
-        };
-        quote! {
-            #static_ #(&func.name)(#api_arg #(for (name, _) in &func.args => #name,)) {
-                #(for (name, ty) in &func.args => #(self.generate_lower(&api, name, ty)))
-                const ret = #(&api).instance.exports.#(format!("__{}", func.fqn()))(
-                    #self_arg
-                    #(for (name, ty) in &func.args => #(self.generate_arg(name, ty))));
-                #(self.generate_lift(&api, func.ret.as_ref()))
-                #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(name, ty)))
-                #(self.generate_return_stmt(func.ret.as_ref()))
-            }
-        }
-    }
-
-    fn generate_lower(&self, api: &js::Tokens, name: &str, ty: &AbiType) -> js::Tokens {
-        match ty {
-            AbiType::Num(_) => quote!(),
-            AbiType::Bool => quote!(const #(name)_int = #name ? 1 : 0;),
-            AbiType::RefStr | AbiType::String => quote! {
-                const #(name)_ptr = #api.allocate(#name.length, 1);
-                const #(name)_buf = new Uint8Array(#api.instance.exports.memory.buffer, #(name)_ptr, #name.length);
-                const #(name)_encoder = new TextEncoder();
-                #(name)_encoder.encodeInto(#name, #(name)_buf);
-            },
-            AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
-                let (size, align) = self.abi.layout(*ty);
-                quote! {
-                    const #(name)_ptr = this.allocate(#name.length * #size, #align);
-                    const #(name)_buf = new #(self.generate_array(*ty))(
-                        #api.instance.exports.memory.buffer, #(name)_ptr, #name.length);
-                    #(name)_buf.set(#name, 0);
-                }
-            }
-            AbiType::RefObject(_) => quote!(const #(name)_ptr = #(name).box.borrow();),
-            AbiType::Object(_) => quote!(const #(name)_ptr = #(name).box.move();),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_arg(&self, name: &str, ty: &AbiType) -> js::Tokens {
-        match ty {
-            AbiType::Num(_) => quote!(#name,),
-            AbiType::Bool => quote!(#(name)_int,),
-            AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #name.length,),
-            AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #name.length, #name.length,),
-            AbiType::Object(_) | AbiType::RefObject(_) => quote!(#(name)_ptr,),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_lower_cleanup(&self, name: &str, ty: &AbiType) -> js::Tokens {
-        match ty {
-            AbiType::Num(_) | AbiType::Bool | AbiType::String | AbiType::Vec(_) => quote!(),
-            AbiType::RefStr => quote! {
-                if (#name.length > 0) {
-                    this.deallocate(#(name)_ptr, #name.length, 1);
+        let args = quote!(#(for (name, _) in &func.args => #name,));
+        let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
+        match &func.ty {
+            FunctionType::Constructor(_) => quote! {
+                static #(&func.name)(api, #args) {
+                    #body
                 }
             },
-            AbiType::RefSlice(ty) => {
-                let (size, align) = self.abi.layout(*ty);
-                quote! {
-                    if (#name.length > 0) {
-                        this.deallocate(#(name)_ptr, #name.length * #size, #align);
-                    }
+            _ => quote! {
+                #(&func.name)(#args) {
+                    #body
                 }
-            }
-            AbiType::Object(_) | AbiType::RefObject(_) => quote!(),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
+            },
         }
     }
 
-    fn generate_lift(&self, api: &js::Tokens, ret: Option<&AbiType>) -> js::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Num(_) => quote!(),
-                AbiType::Bool => quote!(const ret_bool = ret > 0;),
-                AbiType::RefStr => quote! {
-                    const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
-                    const decoder = new TextDecoder();
-                    const ret_str = decoder.decode(buf);
-                },
-                AbiType::String => quote! {
-                    const buf = new Uint8Array(#api.instance.exports.memory.buffer, ret[0], ret[1]);
-                    const decoder = new TextDecoder();
-                    const ret_str = decoder.decode(buf);
-                    if (ret[2] > 0) {
-                        #api.deallocate(ret[0], ret[2], 1);
-                    }
-                },
-                AbiType::RefSlice(ty) => {
-                    let (size, _align) = self.abi.layout(*ty);
-                    quote! {
-                        const buf = new #(self.generate_array(*ty))(
-                            #api.instance.exports.memory.buffer, ret[0], ret[1] * #size);
-                        const ret_arr = Array.from(buf);
-                    }
-                }
-                AbiType::Vec(ty) => {
-                    let (size, align) = self.abi.layout(*ty);
-                    quote! {
-                        const buf = new #(self.generate_array(*ty))(
-                            #api.instance.exports.memory.buffer, ret[0], ret[1]);
-                        const ret_arr = Array.from(buf);
-                        if (ret[2] > 0) {
-                            #api.deallocate(ret[0], ret[2] * #size, #align);
-                        }
-                    }
-                }
-                AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
-                AbiType::Object(ident) => {
-                    let destructor = format!("drop_box_{}", ident);
-                    quote! {
-                        const destructor = () => { #api.drop(#_(#destructor), ret) };
-                        const ret_box = new Box(ret, destructor);
-                        const ret_obj = new #ident(#api, ret_box);
-                    }
-                }
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
+    fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
+        match instr {
+            Instr::BorrowSelf(out) => quote!(const #(self.ident(out)) = this.box.borrow();),
+            Instr::BorrowObject(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).box.borrow();),
+            Instr::MoveObject(in_, out)
+            | Instr::MoveFuture(in_, out)
+            | Instr::MoveStream(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).box.move();),
+            Instr::MakeObject(obj, box_, drop, out) => quote! {
+                const #(self.ident(box_))_0 = () => { #api.drop(#_(#drop), #(self.ident(box_))); };
+                const #(self.ident(box_))_1 = new Box(#(self.ident(box_)), #(self.ident(box_))_0);
+                const #(self.ident(out)) = new #obj(#api, #(self.ident(box_))_1);
+            },
+            Instr::BindArg(arg, out) => quote!(const #(self.ident(out)) = #arg;),
+            Instr::BindRet(ret, idx, out) => quote!(const #(self.ident(out)) = #(self.ident(ret))[#(*idx)];),
+            // Casts below i32 are no ops as wasm only has i32 and i64
+            Instr::CastU8I8(in_, out)
+            | Instr::CastI8U8(in_, out)
+            | Instr::CastI16U16(in_, out)
+            | Instr::CastU16I16(in_, out)
+            // TODO
+            | Instr::CastI32U32(in_, out)
+            | Instr::CastU32I32(in_, out)
+            | Instr::CastI64U64(in_, out)
+            | Instr::CastU64I64(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_));),
+            Instr::CastBoolI8(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;),
+            Instr::CastI8Bool(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) > 0;),
+            Instr::StrLen(in_, out)
+            | Instr::VecLen(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).length;),
+            Instr::Allocate(ptr, len, size, align) => {
+                quote!(const #(self.ident(ptr)) = #api.allocate(#(self.ident(len)) * #(*size), #(*align));)
             }
-        } else {
-            quote!()
+            Instr::Deallocate(ptr, len, size, align) => quote! {
+                if (#(self.ident(len)) > 0) {
+                    #api.deallocate(#(self.ident(ptr)), #(self.ident(len)) * #(*size), #(*align));
+                }
+            },
+            Instr::LowerString(in_, ptr, len) => quote! {
+                const #(self.ident(in_))_0 =
+                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
+                const #(self.ident(in_))_1 = new TextEncoder();
+                #(self.ident(in_))_1.encodeInto(#(self.ident(in_)), #(self.ident(in_))_0);
+            },
+            Instr::LiftString(ptr, len, out) => quote! {
+                const #(self.ident(out))_0 =
+                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
+                const #(self.ident(out))_1 = new TextDecoder();
+                const #(self.ident(out)) = #(self.ident(out))_1.decode(#(self.ident(out))_0);
+            },
+
+            Instr::LowerVec(in_, ptr, len, ty) => quote! {
+                const #(self.ident(in_))_0 =
+                    new #(self.generate_array(*ty))(
+                        #api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
+                #(self.ident(in_))_0.set(#(self.ident(in_)), 0);
+            },
+            Instr::LiftVec(ptr, len, out, ty) => quote! {
+                const #(self.ident(out))_0 =
+                    new #(self.generate_array(*ty))(
+                        #api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
+                const #(self.ident(out)) = Array.from(#(self.ident(out))_0);
+            },
+            Instr::Call(symbol, ret, args) => quote! {
+                const #(self.ident(ret)) = #api.instance.exports.#symbol(#(for arg in args => #(self.ident(arg)),));
+            },
+            Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
+            Instr::ReturnVoid => quote!(return;),
         }
     }
 
-    fn generate_return_stmt(&self, ret: Option<&AbiType>) -> js::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Num(_) => quote!(return ret;),
-                AbiType::Bool => quote!(return ret_bool;),
-                AbiType::RefStr | AbiType::String => quote!(return ret_str;),
-                AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_arr;),
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Object(_) => quote!(return ret_obj;),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!()
-        }
+    fn ident(&self, ident: &u32) -> js::Tokens {
+        quote!(#(format!("tmp{}", ident)))
     }
 
     fn generate_array(&self, ty: NumType) -> js::Tokens {
@@ -455,7 +376,7 @@ impl WasmMultiValueShim {
         for obj in iface.objects() {
             for func in &obj.methods {
                 if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
-                    funcs.push(format!("\"__{} {}\"", &func.name, ret))
+                    funcs.push(format!("\"__{}_{} {}\"", &obj.name, &func.name, ret))
                 }
             }
         }
@@ -498,7 +419,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let mut rust_gen = RustGenerator::new(Abi::Wasm(32));
+        let mut rust_gen = RustGenerator::new(Abi::Wasm(FfiType::I32));
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::default();
@@ -595,17 +516,5 @@ pub mod test_runner {
             ts_tokens.to_file_string().unwrap()
         );
         Ok(())
-    }
-
-    #[test]
-    fn no_args_no_ret() {
-        compile_pass(
-            "hello_world fn();",
-            quote!(
-                pub fn hello_world() {}
-            ),
-            quote!(api.hello_world();),
-        )
-        .unwrap();
     }
 }
