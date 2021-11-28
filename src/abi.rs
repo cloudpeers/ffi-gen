@@ -220,7 +220,7 @@ impl Abi {
                 instr.push(Instr::VecLen(arg, len));
                 let (size, align) = self.layout(*ty);
                 instr.push(Instr::Allocate(ptr, len, size, align));
-                instr.push(Instr::LowerVec(arg, ptr, len, size));
+                instr.push(Instr::LowerVec(arg, ptr, len, *ty));
                 args.push((ptr, self.ptr()));
                 args.push((len, self.ptr()));
                 cleanup.push(Instr::Deallocate(ptr, len, size, align));
@@ -233,7 +233,7 @@ impl Abi {
                 instr.push(Instr::VecLen(arg, len));
                 let (size, align) = self.layout(*ty);
                 instr.push(Instr::Allocate(ptr, len, size, align));
-                instr.push(Instr::LowerVec(arg, ptr, len, size));
+                instr.push(Instr::LowerVec(arg, ptr, len, *ty));
                 args.push((ptr, self.ptr()));
                 args.push((len, self.ptr()));
                 args.push((len, self.ptr()));
@@ -289,7 +289,7 @@ impl Abi {
         for (name, ty) in func.args.iter() {
             let arg = ident;
             ident += 1;
-            instr.push(Instr::BindArg(name.clone(), ident));
+            instr.push(Instr::BindArg(name.clone(), arg));
             self.lower_arg(arg, ty, &mut ident, &mut args, &mut instr, &mut cleanup);
         }
         let ret = ident;
@@ -379,8 +379,8 @@ impl Abi {
                 ident += 3;
                 rets.push(self.ptr());
                 rets.push(self.ptr());
-                instr.push(Instr::BindRet(0, ptr));
-                instr.push(Instr::BindRet(1, len));
+                instr.push(Instr::BindRet(ret, 0, ptr));
+                instr.push(Instr::BindRet(ret, 1, len));
                 instr.push(Instr::LiftString(ptr, len, out));
                 return_.push(Instr::ReturnValue(out));
             }
@@ -390,9 +390,9 @@ impl Abi {
                 rets.push(self.ptr());
                 rets.push(self.ptr());
                 rets.push(self.ptr());
-                instr.push(Instr::BindRet(0, ptr));
-                instr.push(Instr::BindRet(1, len));
-                instr.push(Instr::BindRet(2, cap));
+                instr.push(Instr::BindRet(ret, 0, ptr));
+                instr.push(Instr::BindRet(ret, 1, len));
+                instr.push(Instr::BindRet(ret, 2, cap));
                 instr.push(Instr::LiftString(ptr, len, out));
                 instr.push(Instr::Deallocate(ptr, cap, 1, 1));
                 return_.push(Instr::ReturnValue(out));
@@ -402,10 +402,9 @@ impl Abi {
                 ident += 3;
                 rets.push(self.ptr());
                 rets.push(self.ptr());
-                instr.push(Instr::BindRet(0, ptr));
-                instr.push(Instr::BindRet(1, len));
-                let (size, _align) = self.layout(*ty);
-                instr.push(Instr::LiftVec(ptr, len, out, size));
+                instr.push(Instr::BindRet(ret, 0, ptr));
+                instr.push(Instr::BindRet(ret, 1, len));
+                instr.push(Instr::LiftVec(ptr, len, out, *ty));
                 return_.push(Instr::ReturnValue(out));
             }
             Some(AbiType::Vec(ty)) => {
@@ -414,11 +413,11 @@ impl Abi {
                 rets.push(self.ptr());
                 rets.push(self.ptr());
                 rets.push(self.ptr());
-                instr.push(Instr::BindRet(0, ptr));
-                instr.push(Instr::BindRet(1, len));
-                instr.push(Instr::BindRet(2, cap));
+                instr.push(Instr::BindRet(ret, 0, ptr));
+                instr.push(Instr::BindRet(ret, 1, len));
+                instr.push(Instr::BindRet(ret, 2, cap));
                 let (size, align) = self.layout(*ty);
-                instr.push(Instr::LiftVec(ptr, len, out, size));
+                instr.push(Instr::LiftVec(ptr, len, out, *ty));
                 instr.push(Instr::Deallocate(ptr, cap, size, align));
                 return_.push(Instr::ReturnValue(out));
             }
@@ -427,7 +426,7 @@ impl Abi {
                 let out = ident;
                 ident += 1;
                 rets.push(self.ptr());
-                let destructor = format!("drop_object_{}", obj);
+                let destructor = format!("drop_box_{}", obj);
                 instr.push(Instr::MakeObject(obj.clone(), ret, destructor, out));
                 return_.push(Instr::ReturnValue(out));
             }
@@ -490,7 +489,7 @@ pub enum Instr {
     MoveStream(u32, u32),
     MakeObject(String, u32, String, u32),
     BindArg(String, u32),
-    BindRet(usize, u32),
+    BindRet(u32, usize, u32),
     CastU8I8(u32, u32),
     CastU16I16(u32, u32),
     CastU32I32(u32, u32),
@@ -507,9 +506,8 @@ pub enum Instr {
     Deallocate(u32, u32, usize, usize),
     LowerString(u32, u32, u32),
     LiftString(u32, u32, u32),
-    LowerVec(u32, u32, u32, usize),
-    LiftVec(u32, u32, u32, usize),
-    IsSome(u32, u32),
+    LowerVec(u32, u32, u32, NumType),
+    LiftVec(u32, u32, u32, NumType),
     Call(String, u32, Vec<u32>),
     ReturnValue(u32),
     ReturnVoid,
