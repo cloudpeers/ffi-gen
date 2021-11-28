@@ -280,7 +280,7 @@ impl Abi {
         let mut args = vec![];
         let mut rets = vec![];
         let mut return_ = vec![];
-        if let FunctionType::Constructor(_) = &func.ty {
+        if let FunctionType::Method(_) = &func.ty {
             let self_ = ident;
             ident += 1;
             instr.push(Instr::BorrowSelf(self_));
@@ -565,6 +565,19 @@ impl Interface {
                 ret,
             };
             funcs.push(func);
+        }
+        funcs
+    }
+
+    pub fn ffi_functions(&self, abi: &Abi) -> Vec<FfiFunction> {
+        let mut funcs = vec![];
+        for function in self.functions() {
+            funcs.push(abi.lower_func(&function));
+        }
+        for obj in self.objects() {
+            for method in &obj.methods {
+                funcs.push(abi.lower_func(method));
+            }
         }
         funcs
     }

@@ -83,6 +83,7 @@ impl RustGenerator {
             }
 
             #(for func in iface.functions() => #(self.generate_function(func)))
+            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_function(method))))
 
             #(for dest in &self.destructors => #(self.generate_destructor(dest)))
         }

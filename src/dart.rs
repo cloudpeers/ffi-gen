@@ -1,4 +1,7 @@
-use crate::{Abi, AbiFunction, AbiObject, AbiType, Interface, PrimType};
+use crate::{
+    Abi, AbiFunction, AbiObject, AbiType, FfiFunction, FfiType, FunctionType, Instr, Interface,
+    NumType,
+};
 use genco::prelude::*;
 use genco::tokens::static_literal;
 
@@ -25,23 +28,6 @@ impl DartGenerator {
             import "dart:ffi" as ffi;
             import "dart:io" show Platform;
             import "dart:typed_data";
-
-            class _Slice extends ffi.Struct {
-                external ffi.Pointer<ffi.Uint8> ptr;
-
-                @ffi.IntPtr()
-                external int len;
-            }
-
-            class _Alloc extends ffi.Struct {
-                external ffi.Pointer<ffi.Uint8> ptr;
-
-                @ffi.IntPtr()
-                external int len;
-
-                @ffi.IntPtr()
-                external int cap;
-            }
 
             ffi.Pointer<ffi.Void> _registerFinalizer(Box boxed) {
                 final dart = ffi.DynamicLibrary.executable();
@@ -79,17 +65,17 @@ impl DartGenerator {
                 late final _drop = _dropPtr.asFunction<
                     void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>();
 
-                ffi.Pointer<ffi.Void> borrow() {
+                int borrow() {
                     if (this._dropped) {
                         throw new StateError("use after free");
                     }
                     if (this._moved) {
                         throw new StateError("use after move");
                     }
-                    return this._ptr;
+                    return this._ptr.address;
                 }
 
-                ffi.Pointer<ffi.Void> move() {
+                int move() {
                     if (this._dropped) {
                         throw new StateError("use after free");
                     }
@@ -98,7 +84,7 @@ impl DartGenerator {
                     }
                     this._moved = true;
                     _unregisterFinalizer(this);
-                    return this._ptr;
+                    return this._ptr.address;
                 }
 
                 void drop() {
@@ -165,7 +151,7 @@ impl DartGenerator {
                     this._deallocate(pointer.cast(), byteCount, alignment);
                 }
 
-                #(for func in iface.functions() => #(self.generate_function(quote!(this), func)))
+                #(for func in iface.functions() => #(self.generate_function(&func)))
 
                 late final _allocatePtr = _lookup<
                     ffi.NativeFunction<
@@ -181,10 +167,12 @@ impl DartGenerator {
                 late final _deallocate = _deallocatePtr.asFunction<
                     Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
-                #(for func in iface.clone().into_functions() => #(self.generate_wrapper(func)))
+                #(for func in iface.ffi_functions(&self.abi) => #(self.generate_wrapper(func)))
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
+
+            #(for func in iface.ffi_functions(&self.abi) => #(self.generate_return_struct(&func.symbol, &func.ret)))
         }
     }
 
@@ -196,7 +184,7 @@ impl DartGenerator {
 
                 #(&obj.name)._(this._api, this._box);
 
-                #(for func in obj.methods => #(self.generate_method(func)))
+                #(for func in &obj.methods => #(self.generate_function(func)))
 
                 void drop() {
                     this._box.drop();
@@ -205,159 +193,146 @@ impl DartGenerator {
         }
     }
 
-    fn generate_method(&self, func: AbiFunction) -> dart::Tokens {
-        if func.is_static {
-            quote! {
-                factory #(func.object.as_ref().unwrap()).#(&func.name)(
-                    Api api, #(for (name, ty) in &func.args => #(self.generate_arg(name, ty))))
-                {
-                    #(self.generate_body(&quote!(api), &func))
-                    return new #(func.object.as_ref().unwrap())._(api, ret_box);
+    fn generate_function(&self, func: &AbiFunction) -> dart::Tokens {
+        let ffi = self.abi.lower_func(&func);
+        let api = match &func.ty {
+            FunctionType::Constructor(_) => quote!(api),
+            FunctionType::Method(_) => quote!(this._api),
+            FunctionType::Function => quote!(this),
+        };
+        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #name,));
+        let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
+        match &func.ty {
+            FunctionType::Constructor(object) => quote! {
+                factory #object.#(&func.name)(Api api, #args) {
+                    #body
                 }
-            }
-        } else {
-            self.generate_function(quote!(this._api), func)
-        }
-    }
-
-    fn generate_function(&self, api: dart::Tokens, func: AbiFunction) -> dart::Tokens {
-        quote! {
-            #(self.generate_return(func.ret.as_ref())) #(&func.name)(
-                #(for (name, ty) in &func.args => #(self.generate_arg(name, ty))))
-            {
-                #(self.generate_body(&api, &func))
-                #(self.generate_return_stmt(func.ret.as_ref()))
-            }
-        }
-    }
-
-    fn generate_body(&self, api: &dart::Tokens, func: &AbiFunction) -> dart::Tokens {
-        let self_arg = if func.needs_self() {
-            quote!(this._box.borrow(),)
-        } else {
-            quote!()
-        };
-        quote! {
-            #(for (name, ty) in &func.args => #(self.generate_lower(api, name, ty)))
-            final ret = #api.#(format!("_{}", func.fqn()))(
-                #self_arg
-                #(for (name, ty) in &func.args => #(self.generate_lower_args(api, name, ty))));
-            #(self.generate_lift(api, func.ret.as_ref()))
-            #(for (name, ty) in &func.args => #(self.generate_lower_cleanup(api, name, ty)))
-        }
-    }
-
-    fn generate_wrapper(&self, func: AbiFunction) -> dart::Tokens {
-        let (self_native, self_wrapped) = if func.needs_self() {
-            (
-                self.generate_arg_native("self", &func.self_type()),
-                self.generate_arg_wrapped("self", &func.self_type()),
-            )
-        } else {
-            (quote!(), quote!())
-        };
-        quote! {
-            late final #(format!("_{}Ptr", func.fqn())) = _lookup<
-                ffi.NativeFunction<
-                    #(self.generate_return_native(func.ret.as_ref()))
-                        Function(
-                            #self_native
-                            #(for (name, ty) in &func.args => #(self.generate_arg_native(name, ty))))>>(
-                            #_(#(format!("__{}", &func.fqn()))));
-
-            late final #(format!("_{}", func.fqn())) = #(format!("_{}Ptr", func.fqn()))
-                .asFunction<#(self.generate_return_wrapped(func.ret.as_ref()))
-                    Function(
-                        #self_wrapped
-                        #(for (name, ty) in &func.args => #(self.generate_arg_wrapped(name, ty))))>();
-        }
-    }
-
-    fn generate_arg(&self, name: &str, ty: &AbiType) -> dart::Tokens {
-        match ty {
-            AbiType::Prim(ty) => quote!(#(self.generate_prim_type(*ty)) #name,),
-            AbiType::Bool => quote!(bool #name,),
-            AbiType::RefStr | AbiType::String => quote!(String #name,),
-            AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
-                quote!(List<#(self.generate_prim_type(*ty))> #name,)
-            }
-            AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty #name,),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_arg_native(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
-        match ty {
-            AbiType::Prim(ty) => quote!(#(self.generate_prim_type_native(*ty)),),
-            AbiType::Bool => quote!(ffi.Uint8,),
-            AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr,),
-            AbiType::RefSlice(ty) => {
-                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr,)
-            }
-            AbiType::String => {
-                quote!(ffi.Pointer<ffi.Uint8>, ffi.IntPtr, ffi.IntPtr)
-            }
-            AbiType::Vec(ty) => {
-                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, ffi.IntPtr, ffi.IntPtr,)
-            }
-            AbiType::RefObject(_) | AbiType::Object(_) => {
-                quote!(ffi.Pointer<ffi.Void>,)
-            }
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_arg_wrapped(&self, _name: &str, ty: &AbiType) -> dart::Tokens {
-        match ty {
-            AbiType::Prim(ty) => quote!(#(self.generate_prim_type_wrapped(*ty)),),
-            AbiType::Bool => quote!(int,),
-            AbiType::RefStr => quote!(ffi.Pointer<ffi.Uint8>, int,),
-            AbiType::String => quote!(ffi.Pointer<ffi.Uint8>, int, int,),
-            AbiType::RefSlice(ty) => {
-                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int,)
-            }
-            AbiType::Vec(ty) => {
-                quote!(ffi.Pointer<#(self.generate_prim_type_native(*ty))>, int, int,)
-            }
-            AbiType::RefObject(_) | AbiType::Object(_) => {
-                quote!(ffi.Pointer<ffi.Void>,)
-            }
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_lower(&self, api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
-        match ty {
-            AbiType::Prim(_) => quote!(),
-            AbiType::Bool => quote!(final int #(name)_int = #name ? 1 : 0;),
-            AbiType::RefStr | AbiType::String => quote! {
-                final #(name)_utf8 = utf8.encode(#(name));
-                final int #(name)_len = #(name)_utf8.length;
-                final ffi.Pointer<ffi.Uint8> #(name)_ptr = #api.allocate(#(name)_len, 1);
-                final Uint8List #(name)_view = #(name)_ptr.asTypedList(#(name)_len);
-                #(name)_view.setAll(0, #(name)_utf8);
             },
-            AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
-                let (size, align) = self.abi.layout(*ty);
+            _ => {
+                let ret = if let Some(ret) = func.ret.as_ref() {
+                    self.generate_type(ret)
+                } else {
+                    quote!(void)
+                };
                 quote! {
-                    final int #(name)_len = #(name).length;
-                    final ffi.Pointer<#(self.generate_prim_type_native(*ty))> #(name)_ptr =
-                        #api.allocate(#(name)_len * #size, #align);
-                    final #(name)_view = #(name)_ptr.asTypedList(#(name)_len);
-                    #(name)_view.setAll(0, #(name));
+                    #ret #(&func.name)(#args) {
+                        #body
+                    }
                 }
             }
-            AbiType::RefObject(_) => quote!(final #(name)_ptr = #(name)._box.borrow();),
-            AbiType::Object(_) => quote!(final #(name)_ptr = #(name)._box.move();),
+        }
+    }
+
+    fn generate_instr(&self, api: &dart::Tokens, instr: &Instr) -> dart::Tokens {
+        match instr {
+            Instr::BorrowSelf(out) => quote!(final #(self.ident(out)) = this._box.borrow();),
+            Instr::BorrowObject(in_, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(in_))._box.borrow();)
+            }
+            Instr::MoveObject(in_, out)
+            | Instr::MoveFuture(in_, out)
+            | Instr::MoveStream(in_, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(in_))._box.move();)
+            }
+            Instr::MakeObject(obj, box_, drop, out) => quote! {
+                final ffi.Pointer<ffi.Void> #(self.ident(box_))_0 = ffi.Pointer.fromAddress(#(self.ident(box_)));
+                final #(self.ident(box_))_1 = new Box(#api, #(self.ident(box_))_0, #_(#drop));
+                #(self.ident(box_))_1._finalizer = _registerFinalizer(#(self.ident(box_))_1);
+                final #(self.ident(out)) = new #obj._(#api, #(self.ident(box_))_1);
+            },
+            Instr::BindArg(arg, out) => quote!(final #(self.ident(out)) = #arg;),
+            Instr::BindRet(ret, idx, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(ret)).#(format!("arg{}", idx));)
+            }
+            // TODO
+            Instr::CastU8I8(in_, out)
+            | Instr::CastI8U8(in_, out)
+            | Instr::CastI16U16(in_, out)
+            | Instr::CastU16I16(in_, out)
+            | Instr::CastI32U32(in_, out)
+            | Instr::CastU32I32(in_, out)
+            | Instr::CastI64U64(in_, out)
+            | Instr::CastU64I64(in_, out) => {
+                quote!(final int #(self.ident(out)) = #(self.ident(in_));)
+            }
+            Instr::CastBoolI8(in_, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
+            }
+            Instr::CastI8Bool(in_, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(in_)) > 0;)
+            }
+            Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
+                quote!(final #(self.ident(out)) = #(self.ident(in_)).length;)
+            }
+            Instr::Allocate(ptr, len, size, align) => {
+                quote!(final #(self.ident(ptr)) = #api.allocate(#(self.ident(len)) * #(*size), #(*align)).address;)
+            }
+            Instr::Deallocate(ptr, len, size, align) => quote! {
+                if (#(self.ident(len)) > 0) {
+                    final ffi.Pointer<ffi.Void> #(self.ident(ptr))_0;
+                    #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
+                    #api.deallocate(#(self.ident(ptr))_0, #(self.ident(len)) * #(*size), #(*align));
+                }
+            },
+            Instr::LowerString(in_, ptr, len) => quote! {
+                final ffi.Pointer<ffi.Uint8> #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
+                final #(self.ident(in_))_0 = utf8.encode(#(self.ident(in_)));
+                final Uint8List #(self.ident(in_))_1 = #(self.ident(ptr))_0.asTypedList(#(self.ident(len)));
+                #(self.ident(in_))_1.setAll(0, #(self.ident(in_))_0);
+            },
+            Instr::LiftString(ptr, len, out) => quote! {
+                final ffi.Pointer<ffi.Uint8> #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
+                final #(self.ident(out)) = utf8.decode(#(self.ident(ptr))_0.asTypedList(#(self.ident(len))));
+            },
+            Instr::LowerVec(in_, ptr, len, ty) => quote! {
+                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.ident(ptr))_0 =
+                    ffi.Pointer.fromAddress(#(self.ident(ptr)));
+                final #(self.ident(in_))_1 = #(self.ident(ptr))_0.asTypedList(#(self.ident(len)));
+                #(self.ident(in_))_1.setAll(0, #(self.ident(in_)));
+            },
+            Instr::LiftVec(ptr, len, out, ty) => quote! {
+                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.ident(ptr))_0 =
+                    ffi.Pointer.fromAddress(#(self.ident(ptr)));
+                final #(self.ident(out)) = #(self.ident(ptr))_0.asTypedList(#(self.ident(len))).toList();
+            },
+            Instr::Call(symbol, ret, args) => quote! {
+                final #(self.ident(ret)) = #api.#symbol(#(for arg in args => #(self.ident(arg)),));
+            },
+            Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
+            Instr::ReturnVoid => quote!(return;),
+        }
+    }
+
+    fn ident(&self, ident: &u32) -> dart::Tokens {
+        quote!(#(format!("tmp{}", ident)))
+    }
+
+    fn generate_wrapper(&self, func: FfiFunction) -> dart::Tokens {
+        let native_args =
+            quote!(#(for (_, ty) in &func.args => #(self.generate_native_ffi_type(*ty)),));
+        let wrapped_args =
+            quote!(#(for (_, ty) in &func.args => #(self.generate_wrapped_ffi_type(*ty)),));
+        let native_ret = self.generate_native_return_type(&func.symbol, &func.ret);
+        let wrapped_ret = self.generate_wrapped_return_type(&func.symbol, &func.ret);
+        let symbol_ptr = format!("{}Ptr", &func.symbol);
+        quote! {
+            late final #(&symbol_ptr)  =
+                _lookup<ffi.NativeFunction<#native_ret Function(#native_args)>>(#_(#(&func.symbol)));
+
+            late final #(&func.symbol) =
+                #symbol_ptr.asFunction<#wrapped_ret Function(#wrapped_args)>();
+        }
+    }
+
+    fn generate_type(&self, ty: &AbiType) -> dart::Tokens {
+        match ty {
+            AbiType::Num(ty) => self.generate_num_type(*ty),
+            AbiType::Bool => quote!(bool),
+            AbiType::RefStr | AbiType::String => quote!(String),
+            AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
+                quote!(List<#(self.generate_num_type(*ty))>)
+            }
+            AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty),
             AbiType::Option(_) => todo!(),
             AbiType::Result(_) => todo!(),
             AbiType::Future(_) => todo!(),
@@ -365,213 +340,88 @@ impl DartGenerator {
         }
     }
 
-    fn generate_lower_args(&self, _api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
+    fn generate_num_type(&self, ty: NumType) -> dart::Tokens {
         match ty {
-            AbiType::Prim(_) => quote!(#(name)),
-            AbiType::Bool => quote!(#(name)_int,),
-            AbiType::RefStr | AbiType::RefSlice(_) => quote!(#(name)_ptr, #(name)_len,),
-            AbiType::String | AbiType::Vec(_) => quote!(#(name)_ptr, #(name)_len, #(name)_len,),
-            AbiType::RefObject(_) | AbiType::Object(_) => quote!(#(name)_ptr,),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
+            NumType::F32 | NumType::F64 => quote!(double),
+            _ => quote!(int),
         }
     }
 
-    fn generate_lower_cleanup(&self, api: &dart::Tokens, name: &str, ty: &AbiType) -> dart::Tokens {
+    fn generate_native_num_type(&self, ty: NumType) -> dart::Tokens {
         match ty {
-            AbiType::Prim(_) | AbiType::Bool => quote!(),
-            AbiType::RefStr | AbiType::RefSlice(_) => {
-                quote!(#api.deallocate(#(name)_ptr, #(name)_len, 1);)
-            }
-            AbiType::String | AbiType::Vec(_) => quote!(),
-            AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
-        }
-    }
-
-    fn generate_lift(&self, api: &dart::Tokens, ret: Option<&AbiType>) -> dart::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(_) => quote!(),
-                AbiType::Bool => quote!(final ret_bool = ret > 0;),
-                AbiType::RefStr => quote! {
-                    final ret_str = utf8.decode(ret.ptr.asTypedList(ret.len));
-                },
-                AbiType::RefSlice(_) => quote! {
-                    final ret_list = ret.ptr.asTypedList(ret.len).toList();
-                },
-                AbiType::String => quote! {
-                    final ret_str = utf8.decode(ret.ptr.asTypedList(ret.len));
-                    if (ret.cap > 0) {
-                        #api.deallocate(ret.ptr, ret.cap, 1);
-                    }
-                },
-                AbiType::Vec(ty) => {
-                    let (size, align) = self.abi.layout(*ty);
-                    quote! {
-                        final ffi.Pointer<#(self.generate_prim_type_native(*ty))> ret_list_ptr = ret.ptr.cast();
-                        final ret_list = ret_list_ptr.asTypedList(ret.len).toList();
-                        if (ret.cap > 0) {
-                            #api.deallocate(ret.ptr, ret.cap * #size, #align);
-                        }
-                    }
-                }
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Object(ident) => {
-                    let destructor = format!("drop_box_{}", ident);
-                    quote! {
-                        final ret_box = new Box(#api, ret, #_(#destructor));
-                        ret_box._finalizer = _registerFinalizer(ret_box);
-                        final ret_obj = new #ident._(#api, ret_box);
-                    }
-                }
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!()
-        }
-    }
-
-    fn generate_return_stmt(&self, ret: Option<&AbiType>) -> dart::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(_) => quote!(return ret;),
-                AbiType::Bool => quote!(return ret_bool;),
-                AbiType::RefStr | AbiType::String => quote!(return ret_str;),
-                AbiType::RefSlice(_) | AbiType::Vec(_) => quote!(return ret_list;),
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Object(_) => quote!(return ret_obj;),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!()
-        }
-    }
-
-    fn generate_return(&self, ret: Option<&AbiType>) -> dart::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(ty) => self.generate_prim_type(*ty),
-                AbiType::Bool => quote!(bool),
-                AbiType::RefStr | AbiType::String => quote!(String),
-                AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
-                    quote!(List<#(self.generate_prim_type(*ty))>)
-                }
-                AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
-                AbiType::Object(ident) => quote!(#ident),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!(void)
-        }
-    }
-
-    fn generate_return_native(&self, ret: Option<&AbiType>) -> dart::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(ty) => self.generate_prim_type_native(*ty),
-                AbiType::Bool => quote!(ffi.Uint8),
-                AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
-                AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
-                AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!(ffi.Void)
-        }
-    }
-
-    fn generate_return_wrapped(&self, ret: Option<&AbiType>) -> dart::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Prim(ty) => self.generate_prim_type_wrapped(*ty),
-                AbiType::Bool => quote!(int),
-                AbiType::RefStr | AbiType::RefSlice(_) => quote!(_Slice),
-                AbiType::String | AbiType::Vec(_) => quote!(_Alloc),
-                AbiType::Object(_) => quote!(ffi.Pointer<ffi.Void>),
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
-            }
-        } else {
-            quote!(void)
-        }
-    }
-
-    fn generate_prim_type_native(&self, ty: PrimType) -> dart::Tokens {
-        match ty {
-            PrimType::U8 => quote!(ffi.Uint8),
-            PrimType::U16 => quote!(ffi.Uint16),
-            PrimType::U32 => quote!(ffi.Uint32),
-            PrimType::U64 => quote!(ffi.Uint64),
-            PrimType::Usize => match self.abi.ptr_width() {
-                32 => quote!(ffi.Uint32),
-                64 => quote!(ffi.Uint64),
+            NumType::I8 => quote!(ffi.Int8),
+            NumType::I16 => quote!(ffi.Int16),
+            NumType::I32 => quote!(ffi.Int32),
+            NumType::I64 => quote!(ffi.Int64),
+            NumType::Isize => match self.abi.ptr() {
+                FfiType::I32 => quote!(ffi.Int32),
+                FfiType::I64 => quote!(ffi.Int64),
                 _ => unimplemented!(),
             },
-            PrimType::I8 => quote!(ffi.Int8),
-            PrimType::I16 => quote!(ffi.Int16),
-            PrimType::I32 => quote!(ffi.Int32),
-            PrimType::I64 => quote!(ffi.Int64),
-            PrimType::Isize => match self.abi.ptr_width() {
-                32 => quote!(ffi.Uint32),
-                64 => quote!(ffi.Uint64),
+            NumType::U8 => quote!(ffi.Uint8),
+            NumType::U16 => quote!(ffi.Uint16),
+            NumType::U32 => quote!(ffi.Uint32),
+            NumType::U64 => quote!(ffi.Uint64),
+            NumType::Usize => match self.abi.ptr() {
+                FfiType::I32 => quote!(ffi.Uint32),
+                FfiType::I64 => quote!(ffi.Uint64),
                 _ => unimplemented!(),
             },
-            PrimType::F32 => quote!(ffi.Float),
-            PrimType::F64 => quote!(ffi.Double),
+            NumType::F32 => quote!(ffi.Float),
+            NumType::F64 => quote!(ffi.Double),
         }
     }
 
-    fn generate_prim_type_wrapped(&self, ty: PrimType) -> dart::Tokens {
+    fn generate_native_ffi_type(&self, ty: FfiType) -> dart::Tokens {
         match ty {
-            PrimType::U8
-            | PrimType::U16
-            | PrimType::U32
-            | PrimType::U64
-            | PrimType::Usize
-            | PrimType::I8
-            | PrimType::I16
-            | PrimType::I32
-            | PrimType::I64
-            | PrimType::Isize => quote!(int),
-            PrimType::F32 | PrimType::F64 => quote!(double),
+            FfiType::I8 => quote!(ffi.Int8),
+            FfiType::I16 => quote!(ffi.Int16),
+            FfiType::I32 => quote!(ffi.Int32),
+            FfiType::I64 => quote!(ffi.Int64),
+            FfiType::F32 => quote!(ffi.Float),
+            FfiType::F64 => quote!(ffi.Double),
         }
     }
 
-    fn generate_prim_type(&self, ty: PrimType) -> dart::Tokens {
+    fn generate_wrapped_ffi_type(&self, ty: FfiType) -> dart::Tokens {
         match ty {
-            PrimType::U8
-            | PrimType::U16
-            | PrimType::U32
-            | PrimType::U64
-            | PrimType::Usize
-            | PrimType::I8
-            | PrimType::I16
-            | PrimType::I32
-            | PrimType::I64
-            | PrimType::Isize => quote!(int),
-            PrimType::F32 | PrimType::F64 => quote!(double),
+            FfiType::I8 | FfiType::I16 | FfiType::I32 | FfiType::I64 => quote!(int),
+            FfiType::F32 | FfiType::F64 => quote!(double),
+        }
+    }
+
+    fn generate_native_return_type(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+        match ret.len() {
+            0 => quote!(ffi.Void),
+            1 => self.generate_native_ffi_type(ret[0]),
+            _ => quote!(#(format!("{}Return", symbol))),
+        }
+    }
+
+    fn generate_wrapped_return_type(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+        match ret.len() {
+            0 => quote!(void),
+            1 => self.generate_wrapped_ffi_type(ret[0]),
+            _ => quote!(#(format!("{}Return", symbol))),
+        }
+    }
+
+    fn generate_return_struct(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+        if ret.len() < 2 {
+            quote!()
+        } else {
+            quote! {
+                class #(format!("{}Return", symbol)) extends ffi.Struct {
+                    #(for (i, ty) in ret.iter().enumerate() => #(self.generate_return_struct_field(i, *ty)))
+                }
+            }
+        }
+    }
+
+    fn generate_return_struct_field(&self, i: usize, ty: FfiType) -> dart::Tokens {
+        quote! {
+            @#(self.generate_native_ffi_type(ty))()
+            external #(self.generate_wrapped_ffi_type(ty)) #(format!("arg{}", i));
         }
     }
 }
