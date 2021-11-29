@@ -1,5 +1,5 @@
 use crate::import::{Import, Instr};
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
 use genco::prelude::*;
 use genco::tokens::static_literal;
 
@@ -170,7 +170,7 @@ impl DartGenerator {
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
 
-            #(for func in iface.imports(&self.abi) => #(self.generate_return_struct(&func.symbol, &func.ret)))
+            #(for func in iface.imports(&self.abi) => #(self.generate_return_struct(&func.ret)))
         }
     }
 
@@ -285,25 +285,30 @@ impl DartGenerator {
                     ffi.Pointer.fromAddress(#(self.ident(ptr)));
                 final #(self.ident(out)) = #(self.ident(ptr))_0.asTypedList(#(self.ident(len))).toList();
             },
-            Instr::Call(symbol, ret, args) => quote! {
-                final #(self.ident(ret)) = #api.#symbol(#(for arg in args => #(self.ident(arg)),));
-            },
+            Instr::Call(symbol, ret, args) => {
+                let invoke = quote!(#api.#symbol(#(for arg in args => #(self.ident(arg)),)););
+                if let Some(ret) = ret {
+                    quote!(final #(self.ident(ret)) = #invoke)
+                } else {
+                    invoke
+                }
+            }
             Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
             Instr::ReturnVoid => quote!(return;),
         }
     }
 
-    fn ident(&self, ident: &u32) -> dart::Tokens {
-        quote!(#(format!("tmp{}", ident)))
+    fn ident(&self, var: &Var) -> dart::Tokens {
+        quote!(#(format!("tmp{}", var.binding)))
     }
 
     fn generate_wrapper(&self, func: Import) -> dart::Tokens {
         let native_args =
-            quote!(#(for (_, ty) in &func.args => #(self.generate_native_num_type(*ty)),));
+            quote!(#(for var in &func.args => #(self.generate_native_num_type(var.ty.num())),));
         let wrapped_args =
-            quote!(#(for (_, ty) in &func.args => #(self.generate_wrapped_num_type(*ty)),));
-        let native_ret = self.generate_native_return_type(&func.symbol, &func.ret);
-        let wrapped_ret = self.generate_wrapped_return_type(&func.symbol, &func.ret);
+            quote!(#(for var in &func.args => #(self.generate_wrapped_num_type(var.ty.num())),));
+        let native_ret = self.generate_native_return_type(&func.ret);
+        let wrapped_ret = self.generate_wrapped_return_type(&func.ret);
         let symbol_ptr = format!("{}Ptr", &func.symbol);
         quote! {
             late final #(&symbol_ptr)  =
@@ -353,31 +358,31 @@ impl DartGenerator {
         }
     }
 
-    fn generate_native_return_type(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
-        match ret.len() {
-            0 => quote!(ffi.Void),
-            1 => self.generate_native_num_type(ret[0]),
-            _ => quote!(#(format!("{}Return", symbol))),
+    fn generate_native_return_type(&self, ret: &Return) -> dart::Tokens {
+        match ret {
+            Return::Void => quote!(ffi.Void),
+            Return::Num(var) => self.generate_native_num_type(var.ty.num()),
+            Return::Struct(_, s) => quote!(#s),
         }
     }
 
-    fn generate_wrapped_return_type(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
-        match ret.len() {
-            0 => quote!(void),
-            1 => self.generate_wrapped_num_type(ret[0]),
-            _ => quote!(#(format!("{}Return", symbol))),
+    fn generate_wrapped_return_type(&self, ret: &Return) -> dart::Tokens {
+        match ret {
+            Return::Void => quote!(void),
+            Return::Num(var) => self.generate_wrapped_num_type(var.ty.num()),
+            Return::Struct(_, s) => quote!(#s),
         }
     }
 
-    fn generate_return_struct(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
-        if ret.len() < 2 {
-            quote!()
-        } else {
+    fn generate_return_struct(&self, ret: &Return) -> dart::Tokens {
+        if let Return::Struct(vars, name) = ret {
             quote! {
-                class #(format!("{}Return", symbol)) extends ffi.Struct {
-                    #(for (i, ty) in ret.iter().enumerate() => #(self.generate_return_struct_field(i, *ty)))
+                class #name extends ffi.Struct {
+                    #(for (i, var) in vars.iter().enumerate() => #(self.generate_return_struct_field(i, var.ty.num())))
                 }
             }
+        } else {
+            quote!()
         }
     }
 

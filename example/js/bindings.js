@@ -100,7 +100,7 @@ class Api {
   }
 
   hello_world() {
-    const tmp0 = this.instance.exports.__hello_world();
+    this.instance.exports.__hello_world();
     return;
   }
 }

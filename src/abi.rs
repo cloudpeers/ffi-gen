@@ -35,6 +35,16 @@ pub enum AbiType {
     Stream(Box<AbiType>),
 }
 
+impl AbiType {
+    pub fn num(&self) -> NumType {
+        if let Self::Num(num) = self {
+            *num
+        } else {
+            panic!()
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum FunctionType {
     Constructor(String),
@@ -61,6 +71,13 @@ pub struct AbiObject {
 pub struct AbiStruct {
     pub name: String,
     pub fields: Vec<(String, AbiType)>,
+}
+
+#[derive(Clone, Debug)]
+pub enum Return {
+    Void,
+    Num(Var),
+    Struct(Vec<Var>, String),
 }
 
 #[derive(Default)]

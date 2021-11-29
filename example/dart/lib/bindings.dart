@@ -138,7 +138,7 @@ class Api {
   }
 
   void hello_world() {
-    final tmp0 = this.__hello_world();
+    this.__hello_world();
     return;
   }
 

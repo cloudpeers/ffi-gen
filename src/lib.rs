@@ -4,7 +4,9 @@ mod js;
 mod parser;
 mod rust;
 
-pub use abi::{export, import, Abi, AbiFunction, AbiObject, AbiType, FunctionType, NumType, Var};
+pub use abi::{
+    export, import, Abi, AbiFunction, AbiObject, AbiType, FunctionType, NumType, Return, Var,
+};
 pub use dart::DartGenerator;
 pub use js::{JsGenerator, TsGenerator, WasmMultiValueShim};
 pub use parser::Interface;
