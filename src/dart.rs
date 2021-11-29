@@ -1,7 +1,5 @@
-use crate::{
-    Abi, AbiFunction, AbiObject, AbiType, FfiFunction, FfiType, FunctionType, Instr, Interface,
-    NumType,
-};
+use crate::import::{Import, Instr};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType};
 use genco::prelude::*;
 use genco::tokens::static_literal;
 
@@ -167,12 +165,12 @@ impl DartGenerator {
                 late final _deallocate = _deallocatePtr.asFunction<
                     Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
-                #(for func in iface.ffi_functions(&self.abi) => #(self.generate_wrapper(func)))
+                #(for func in iface.imports(&self.abi) => #(self.generate_wrapper(func)))
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
 
-            #(for func in iface.ffi_functions(&self.abi) => #(self.generate_return_struct(&func.symbol, &func.ret)))
+            #(for func in iface.imports(&self.abi) => #(self.generate_return_struct(&func.symbol, &func.ret)))
         }
     }
 
@@ -194,7 +192,7 @@ impl DartGenerator {
     }
 
     fn generate_function(&self, func: &AbiFunction) -> dart::Tokens {
-        let ffi = self.abi.lower_func(func);
+        let ffi = self.abi.import(func);
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this._api),
@@ -244,21 +242,13 @@ impl DartGenerator {
             Instr::BindRet(ret, idx, out) => {
                 quote!(final #(self.ident(out)) = #(self.ident(ret)).#(format!("arg{}", idx));)
             }
-            // TODO
-            Instr::CastU8I8(in_, out)
-            | Instr::CastI8U8(in_, out)
-            | Instr::CastI16U16(in_, out)
-            | Instr::CastU16I16(in_, out)
-            | Instr::CastI32U32(in_, out)
-            | Instr::CastU32I32(in_, out)
-            | Instr::CastI64U64(in_, out)
-            | Instr::CastU64I64(in_, out) => {
+            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
                 quote!(final int #(self.ident(out)) = #(self.ident(in_));)
             }
-            Instr::CastBoolI8(in_, out) => {
+            Instr::LowerBool(in_, out) => {
                 quote!(final #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
             }
-            Instr::CastI8Bool(in_, out) => {
+            Instr::LiftBool(in_, out) => {
                 quote!(final #(self.ident(out)) = #(self.ident(in_)) > 0;)
             }
             Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
@@ -307,11 +297,11 @@ impl DartGenerator {
         quote!(#(format!("tmp{}", ident)))
     }
 
-    fn generate_wrapper(&self, func: FfiFunction) -> dart::Tokens {
+    fn generate_wrapper(&self, func: Import) -> dart::Tokens {
         let native_args =
-            quote!(#(for (_, ty) in &func.args => #(self.generate_native_ffi_type(*ty)),));
+            quote!(#(for (_, ty) in &func.args => #(self.generate_native_num_type(*ty)),));
         let wrapped_args =
-            quote!(#(for (_, ty) in &func.args => #(self.generate_wrapped_ffi_type(*ty)),));
+            quote!(#(for (_, ty) in &func.args => #(self.generate_wrapped_num_type(*ty)),));
         let native_ret = self.generate_native_return_type(&func.symbol, &func.ret);
         let wrapped_ret = self.generate_wrapped_return_type(&func.symbol, &func.ret);
         let symbol_ptr = format!("{}Ptr", &func.symbol);
@@ -326,11 +316,12 @@ impl DartGenerator {
 
     fn generate_type(&self, ty: &AbiType) -> dart::Tokens {
         match ty {
-            AbiType::Num(ty) => self.generate_num_type(*ty),
+            AbiType::Num(ty) => self.generate_wrapped_num_type(*ty),
+            AbiType::Isize | AbiType::Usize => quote!(int),
             AbiType::Bool => quote!(bool),
             AbiType::RefStr | AbiType::String => quote!(String),
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
-                quote!(List<#(self.generate_num_type(*ty))>)
+                quote!(List<#(self.generate_wrapped_num_type(*ty))>)
             }
             AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty),
             AbiType::Option(_) => todo!(),
@@ -340,7 +331,7 @@ impl DartGenerator {
         }
     }
 
-    fn generate_num_type(&self, ty: NumType) -> dart::Tokens {
+    fn generate_wrapped_num_type(&self, ty: NumType) -> dart::Tokens {
         match ty {
             NumType::F32 | NumType::F64 => quote!(double),
             _ => quote!(int),
@@ -353,60 +344,32 @@ impl DartGenerator {
             NumType::I16 => quote!(ffi.Int16),
             NumType::I32 => quote!(ffi.Int32),
             NumType::I64 => quote!(ffi.Int64),
-            NumType::Isize => match self.abi.ptr() {
-                FfiType::I32 => quote!(ffi.Int32),
-                FfiType::I64 => quote!(ffi.Int64),
-                _ => unimplemented!(),
-            },
             NumType::U8 => quote!(ffi.Uint8),
             NumType::U16 => quote!(ffi.Uint16),
             NumType::U32 => quote!(ffi.Uint32),
             NumType::U64 => quote!(ffi.Uint64),
-            NumType::Usize => match self.abi.ptr() {
-                FfiType::I32 => quote!(ffi.Uint32),
-                FfiType::I64 => quote!(ffi.Uint64),
-                _ => unimplemented!(),
-            },
             NumType::F32 => quote!(ffi.Float),
             NumType::F64 => quote!(ffi.Double),
         }
     }
 
-    fn generate_native_ffi_type(&self, ty: FfiType) -> dart::Tokens {
-        match ty {
-            FfiType::I8 => quote!(ffi.Int8),
-            FfiType::I16 => quote!(ffi.Int16),
-            FfiType::I32 => quote!(ffi.Int32),
-            FfiType::I64 => quote!(ffi.Int64),
-            FfiType::F32 => quote!(ffi.Float),
-            FfiType::F64 => quote!(ffi.Double),
-        }
-    }
-
-    fn generate_wrapped_ffi_type(&self, ty: FfiType) -> dart::Tokens {
-        match ty {
-            FfiType::I8 | FfiType::I16 | FfiType::I32 | FfiType::I64 => quote!(int),
-            FfiType::F32 | FfiType::F64 => quote!(double),
-        }
-    }
-
-    fn generate_native_return_type(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+    fn generate_native_return_type(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
         match ret.len() {
             0 => quote!(ffi.Void),
-            1 => self.generate_native_ffi_type(ret[0]),
+            1 => self.generate_native_num_type(ret[0]),
             _ => quote!(#(format!("{}Return", symbol))),
         }
     }
 
-    fn generate_wrapped_return_type(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+    fn generate_wrapped_return_type(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
         match ret.len() {
             0 => quote!(void),
-            1 => self.generate_wrapped_ffi_type(ret[0]),
+            1 => self.generate_wrapped_num_type(ret[0]),
             _ => quote!(#(format!("{}Return", symbol))),
         }
     }
 
-    fn generate_return_struct(&self, symbol: &str, ret: &[FfiType]) -> dart::Tokens {
+    fn generate_return_struct(&self, symbol: &str, ret: &[NumType]) -> dart::Tokens {
         if ret.len() < 2 {
             quote!()
         } else {
@@ -418,10 +381,10 @@ impl DartGenerator {
         }
     }
 
-    fn generate_return_struct_field(&self, i: usize, ty: FfiType) -> dart::Tokens {
+    fn generate_return_struct_field(&self, i: usize, ty: NumType) -> dart::Tokens {
         quote! {
-            @#(self.generate_native_ffi_type(ty))()
-            external #(self.generate_wrapped_ffi_type(ty)) #(format!("arg{}", i));
+            @#(self.generate_native_num_type(ty))()
+            external #(self.generate_wrapped_num_type(ty)) #(format!("arg{}", i));
         }
     }
 }

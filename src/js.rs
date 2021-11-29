@@ -1,6 +1,5 @@
-use crate::{
-    Abi, AbiFunction, AbiObject, AbiType, FfiType, FunctionType, Instr, Interface, NumType,
-};
+use crate::import::Instr;
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -9,9 +8,7 @@ pub struct JsGenerator {
 
 impl Default for JsGenerator {
     fn default() -> Self {
-        Self {
-            abi: Abi::Wasm(FfiType::I32),
-        }
+        Self { abi: Abi::Wasm32 }
     }
 }
 
@@ -57,15 +54,14 @@ impl TsGenerator {
                     NumType::U8
                     | NumType::U16
                     | NumType::U32
-                    | NumType::Usize
                     | NumType::I8
                     | NumType::I16
                     | NumType::I32
-                    | NumType::Isize
                     | NumType::F32
                     | NumType::F64 => quote!(number),
                     NumType::U64 | NumType::I64 => quote!(BigInt),
                 },
+                AbiType::Isize | AbiType::Usize => quote!(number),
                 AbiType::Bool => quote!(boolean),
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
@@ -230,7 +226,7 @@ impl JsGenerator {
     }
 
     fn generate_function(&self, func: &AbiFunction) -> js::Tokens {
-        let ffi = self.abi.lower_func(func);
+        let ffi = self.abi.import(func);
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this.api),
@@ -255,31 +251,35 @@ impl JsGenerator {
     fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
         match instr {
             Instr::BorrowSelf(out) => quote!(const #(self.ident(out)) = this.box.borrow();),
-            Instr::BorrowObject(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).box.borrow();),
+            Instr::BorrowObject(in_, out) => {
+                quote!(const #(self.ident(out)) = #(self.ident(in_)).box.borrow();)
+            }
             Instr::MoveObject(in_, out)
             | Instr::MoveFuture(in_, out)
-            | Instr::MoveStream(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).box.move();),
+            | Instr::MoveStream(in_, out) => {
+                quote!(const #(self.ident(out)) = #(self.ident(in_)).box.move();)
+            }
             Instr::MakeObject(obj, box_, drop, out) => quote! {
                 const #(self.ident(box_))_0 = () => { #api.drop(#_(#drop), #(self.ident(box_))); };
                 const #(self.ident(box_))_1 = new Box(#(self.ident(box_)), #(self.ident(box_))_0);
                 const #(self.ident(out)) = new #obj(#api, #(self.ident(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(const #(self.ident(out)) = #arg;),
-            Instr::BindRet(ret, idx, out) => quote!(const #(self.ident(out)) = #(self.ident(ret))[#(*idx)];),
+            Instr::BindRet(ret, idx, out) => {
+                quote!(const #(self.ident(out)) = #(self.ident(ret))[#(*idx)];)
+            }
             // Casts below i32 are no ops as wasm only has i32 and i64
-            Instr::CastU8I8(in_, out)
-            | Instr::CastI8U8(in_, out)
-            | Instr::CastI16U16(in_, out)
-            | Instr::CastU16I16(in_, out)
             // TODO
-            | Instr::CastI32U32(in_, out)
-            | Instr::CastU32I32(in_, out)
-            | Instr::CastI64U64(in_, out)
-            | Instr::CastU64I64(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_));),
-            Instr::CastBoolI8(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;),
-            Instr::CastI8Bool(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) > 0;),
-            Instr::StrLen(in_, out)
-            | Instr::VecLen(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)).length;),
+            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
+                quote!(const #(self.ident(out)) = #(self.ident(in_));)
+            }
+            Instr::LowerBool(in_, out) => {
+                quote!(const #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
+            }
+            Instr::LiftBool(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) > 0;),
+            Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
+                quote!(const #(self.ident(out)) = #(self.ident(in_)).length;)
+            }
             Instr::Allocate(ptr, len, size, align) => {
                 quote!(const #(self.ident(ptr)) = #api.allocate(#(self.ident(len)) * #(*size), #(*align));)
             }
@@ -331,12 +331,10 @@ impl JsGenerator {
             NumType::U16 => quote!(Uint16Array),
             NumType::U32 => quote!(Uint32Array),
             NumType::U64 => quote!(BigUint64Array),
-            NumType::Usize => quote!(Uint32Array),
             NumType::I8 => quote!(Int8Array),
             NumType::I16 => quote!(Int16Array),
             NumType::I32 => quote!(Int32Array),
             NumType::I64 => quote!(BigInt64Array),
-            NumType::Isize => quote!(Int32Array),
             NumType::F32 => quote!(Float32Array),
             NumType::F64 => quote!(Float64Array),
         }
@@ -391,9 +389,12 @@ impl WasmMultiValueShim {
     fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
         if let Some(ret) = ret {
             match ret {
-                AbiType::Num(_) | AbiType::Bool | AbiType::RefObject(_) | AbiType::Object(_) => {
-                    None
-                }
+                AbiType::Num(_)
+                | AbiType::Isize
+                | AbiType::Usize
+                | AbiType::Bool
+                | AbiType::RefObject(_)
+                | AbiType::Object(_) => None,
                 AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
                 AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
                 AbiType::Option(_) => todo!(),
@@ -419,7 +420,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let mut rust_gen = RustGenerator::new(Abi::Wasm(FfiType::I32));
+        let mut rust_gen = RustGenerator::new(Abi::Wasm32);
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::default();
