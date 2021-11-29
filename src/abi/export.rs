@@ -95,11 +95,7 @@ impl Abi {
                 AbiType::Stream(_) => todo!(),
             }
         }
-        let ret = if let Some(ret) = func.ret.as_ref() {
-            Some(gen.gen(ret.clone()))
-        } else {
-            None
-        };
+        let ret = func.ret.as_ref().map(|ret| gen.gen(ret.clone()));
         exports.push(Instr::CallAbi(
             func.ty.clone(),
             self_,

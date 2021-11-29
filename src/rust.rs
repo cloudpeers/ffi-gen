@@ -49,7 +49,7 @@ impl RustGenerator {
     }
 
     fn generate_function(&self, func: &AbiFunction) -> rust::Tokens {
-        let ffi = self.abi.export(&func);
+        let ffi = self.abi.export(func);
         let args = quote!(#(for var in &ffi.args => #(self.var(var)): #(self.ty(&var.ty)),));
         let ret = match &ffi.ret {
             Return::Void => quote!(),
@@ -58,7 +58,7 @@ impl RustGenerator {
         };
         let return_ = match &ffi.ret {
             Return::Void => quote!(),
-            Return::Num(var) => self.var(&var),
+            Return::Num(var) => self.var(var),
             Return::Struct(vars, name) => quote! {
                 #name {
                     #(for (i, var) in vars.iter().enumerate() => #(format!("ret{}", i)): #(self.var(var)),)
