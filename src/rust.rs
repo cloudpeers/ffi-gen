@@ -1,21 +1,17 @@
-use crate::{Abi, AbiFunction, AbiType, FfiType, FunctionType, Interface, NumType};
+use crate::export::{Instr, Return};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Var};
 use genco::prelude::*;
-use std::collections::HashSet;
 
 pub struct RustGenerator {
     abi: Abi,
-    destructors: HashSet<String>,
 }
 
 impl RustGenerator {
     pub fn new(abi: Abi) -> Self {
-        Self {
-            abi,
-            destructors: Default::default(),
-        }
+        Self { abi }
     }
 
-    pub fn generate(&mut self, iface: Interface) -> rust::Tokens {
+    pub fn generate(&self, iface: Interface) -> rust::Tokens {
         quote! {
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
@@ -44,258 +40,180 @@ impl RustGenerator {
                 std::alloc::dealloc(ptr, layout);
             }
 
-            #(for func in iface.functions() => #(self.generate_function(func)))
-            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_function(method))))
-
-            #(for dest in &self.destructors => #(self.generate_destructor(dest)))
+            #(for func in iface.functions() => #(self.generate_function(&func)))
+            #(for func in iface.functions() => #(self.generate_return_struct(&func)))
+            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_function(&method))))
+            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_return_struct(&method))))
+            #(for obj in iface.objects() => #(self.generate_destructor(&obj)))
         }
     }
 
-    fn generate_function(&mut self, func: &AbiFunction) -> rust::Tokens {
-        let ffi = self.abi.lower_func(&func);
-
+    fn generate_function(&self, func: &AbiFunction) -> rust::Tokens {
+        let ffi = self.abi.export(&func);
+        let args = quote!(#(for var in &ffi.args => #(self.var(var)): #(self.ty(&var.ty)),));
+        let ret = match &ffi.ret {
+            Return::Void => quote!(),
+            Return::Num(var) => quote!(-> #(self.ty(&var.ty))),
+            Return::Struct(_, name) => quote!(-> #name),
+        };
+        let return_ = match &ffi.ret {
+            Return::Void => quote!(),
+            Return::Num(var) => self.var(&var),
+            Return::Struct(vars, name) => quote! {
+                #name {
+                    #(for (i, var) in vars.iter().enumerate() => #(format!("ret{}", i)): #(self.var(var)),)
+                }
+            },
+        };
         quote! {
             #[no_mangle]
-            pub extern "C" fn #(&ffi.symbol)(#(for (name, ty) in &ffi.args => #name: #ty,)) {
+            pub extern "C" fn #(&ffi.symbol)(#args) #ret {
                 panic_abort(move || {
-                    #(for (name, ty) in &func.args => #(self.generate_lift(name, ty)))
-                    let ret = #(self.generate_invoke(&func))(#(for (name, _) in &func.args => #name,));
-                    #(self.generate_lower(func.ret.as_ref()))
+                    #(for instr in &ffi.instr => #(self.instr(instr)))
+                    #return_
                 })
             }
         }
     }
 
-    fn generate_func_name(&self, func: &AbiFunction) -> String {
-        match &func.ty {
-            FunctionType::Constructor(object) | FunctionType::Method(object) => {
-                format!("__{}_{}", object, &func.name)
-            }
-            FunctionType::Function => format!("__{}", &func.name),
-        }
-    }
-
-    fn generate_invoke(&self, func: &AbiFunction) -> rust::Tokens {
-        match &func.ty {
-            FunctionType::Constructor(object) => {
-                quote!(#(object)::#(&func.name))
-            }
-            FunctionType::Method(_) => {
-                quote!(__self.#(&func.name))
-            }
-            FunctionType::Function => {
-                quote!(#(&func.name))
-            }
-        }
-    }
-
-    fn generate_self(&self, func: &AbiFunction) -> rust::Tokens {
-        if let FunctionType::Method(object) = &func.ty {
-            quote!(__self: &#object,)
-        } else {
-            quote!()
-        }
-    }
-
-    fn generate_destructor(&self, boxed: &str) -> rust::Tokens {
+    fn generate_destructor(&self, obj: &AbiObject) -> rust::Tokens {
         // make destructor compatible with dart by adding an unused `isolate_callback_data` as
         // the first argument.
-        let name = format!("drop_box_{}", boxed);
+        let name = format!("drop_box_{}", &obj.name);
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(_: *const core::ffi::c_void, boxed: Box<#boxed>) {
+            pub extern "C" fn #name(_: #(self.num_type(self.abi.iptr())), boxed: #(self.num_type(self.abi.iptr()))) {
                 panic_abort(move || {
-                    drop(boxed);
+                    unsafe { Box::<#(&obj.name)>::from_raw(boxed as *mut _) };
                 });
             }
         }
     }
 
-    fn generate_arg(&self, name: &str, ty: &AbiType) -> rust::Tokens {
-        match ty {
-            AbiType::Num(ty) => quote!(#name: #(self.generate_prim_type(*ty)),),
-            AbiType::Bool => quote!(#name: bool,),
-            AbiType::RefStr | AbiType::RefSlice(_) => quote! {
-                #(name)_ptr: #(self.generate_isize()),
-                #(name)_len: #(self.generate_usize()),
-            },
-            AbiType::String | AbiType::Vec(_) => quote! {
-                #(name)_ptr: #(self.generate_isize()),
-                #(name)_len: #(self.generate_usize()),
-                #(name)_cap: #(self.generate_usize()),
-            },
-            AbiType::RefObject(ident) => quote!(#name: &#ident,),
-            AbiType::Object(ident) => quote!(#name: Box<#ident>,),
-            AbiType::Option(ty) => {
-                let inner = self.generate_arg(name, ty);
-                quote!(#(name)_variant: i32, #inner)
-            }
-            AbiType::Result(ty) => panic!("invalid argument type Result<{:?}>.", ty),
-            AbiType::Future(ty) => panic!("invalid argument type Future<{:?}>.", ty),
-            AbiType::Stream(ty) => panic!("invalid argument type Stream<{:?}>.", ty),
-        }
-    }
-
-    fn generate_lift(&self, name: &str, ty: &AbiType) -> rust::Tokens {
-        match ty {
-            AbiType::Num(_) | AbiType::Bool => quote!(let #(name) = #(name) as _;),
-            AbiType::RefSlice(ty) => quote! {
-                let #name: &[#(self.generate_prim_type(*ty))] =
-                    unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
-            },
-            AbiType::RefStr => quote! {
-                let #name: &[u8] = unsafe { core::slice::from_raw_parts(#(name)_ptr as _, #(name)_len as _) };
-                let #name: &str = unsafe { std::str::from_utf8_unchecked(#name) };
-            },
-            AbiType::String => quote! {
-                let #name = unsafe {
-                    String::from_raw_parts(
-                        #(name)_ptr as _,
-                        #(name)_len as _,
-                        #(name)_cap as _,
-                    )
-                };
-            },
-            AbiType::Vec(ty) => quote! {
-                let #name = unsafe {
-                    Vec::<#(self.generate_prim_type(*ty))>::from_raw_parts(
-                        #(name)_ptr as _,
-                        #(name)_len as _,
-                        #(name)_cap as _,
-                    )
-                };
-            },
-            AbiType::RefObject(_) | AbiType::Object(_) => quote!(),
-            AbiType::Option(ty) => {
-                let inner = self.generate_lift(name, ty);
-                quote! {
-                    let #name = if #(name)_variant == 0 {
-                        None
-                    } else {
-                        #inner
-                        Some(#name)
-                    };
+    fn generate_return_struct(&self, func: &AbiFunction) -> rust::Tokens {
+        let ffi = self.abi.export(func);
+        if let Return::Struct(vars, name) = &ffi.ret {
+            quote! {
+                #[repr(C)]
+                pub struct #name {
+                    #(for (i, var) in vars.iter().enumerate() => #(format!("ret{}", i)): #(self.ty(&var.ty)),)
                 }
             }
-            AbiType::Result(_) => unreachable!(),
-            AbiType::Future(_) => unreachable!(),
-            AbiType::Stream(_) => unreachable!(),
-        }
-    }
-
-    fn generate_return(&mut self, ret: Option<&AbiType>) -> rust::Tokens {
-        if let Some(ret) = ret {
-            if let AbiType::Object(ident) = ret {
-                self.destructors.insert(ident.clone());
-            }
-            quote!(-> #(self.generate_return_type(ret)))
         } else {
             quote!()
         }
     }
 
-    fn generate_return_type(&self, ret: &AbiType) -> rust::Tokens {
-        match ret {
-            AbiType::Num(ty) => self.generate_prim_type(*ty),
-            AbiType::Bool => quote!(bool),
-            AbiType::RefStr | AbiType::RefSlice(_) => self.generate_slice(),
-            AbiType::String | AbiType::Vec(_) => self.generate_alloc(),
-            AbiType::Object(ident) => quote!(Box<#ident>),
-            AbiType::RefObject(ident) => panic!("invalid return type `&{}`", ident),
-            AbiType::Option(ty) => quote!(FfiOption<#(self.generate_return_type(ty))>),
-            AbiType::Result(ty) => {
-                quote!(FfiResult<#(self.generate_return_type(ty)), #(self.generate_alloc())>)
+    fn instr(&self, instr: &Instr) -> rust::Tokens {
+        match instr {
+            Instr::LiftIsize(in_, out)
+            | Instr::LiftUsize(in_, out)
+            | Instr::LowerIsize(in_, out)
+            | Instr::LowerUsize(in_, out) => quote!(let #(self.var(out)) = #(self.var(in_)) as _;),
+            Instr::LiftBool(in_, out) => quote!(let #(self.var(out)) = #(self.var(in_)) > 0;),
+            Instr::LowerBool(in_, out) => {
+                quote!(let #(self.var(out)) = if #(self.var(in_)) { 1 } else { 0 };)
             }
-            AbiType::Future(ty) => {
-                quote!(Box<dyn Future<Output = #(self.generate_return_type(ty))> + Send + Unpin + 'static>)
+            Instr::LiftStr(ptr, len, out) => quote! {
+                let #(self.var(out))_0: &[u8] =
+                    unsafe { core::slice::from_raw_parts(#(self.var(ptr)) as _, #(self.var(len)) as _) };
+                let #(self.var(out)): &str = unsafe { std::str::from_utf8_unchecked(#(self.var(out))_0) };
+            },
+            Instr::LowerStr(in_, ptr, len) => quote! {
+                let #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
+                let #(self.var(len)) = #(self.var(in_)).len() as _;
+            },
+            Instr::LiftString(ptr, len, cap, out) => quote! {
+                let #(self.var(out)) = unsafe {
+                    String::from_raw_parts(
+                        #(self.var(ptr)) as _,
+                        #(self.var(len)) as _,
+                        #(self.var(cap)) as _,
+                    )
+                };
+            },
+            Instr::LowerString(in_, ptr, len, cap) | Instr::LowerVec(in_, ptr, len, cap, _) => {
+                quote! {
+                    let #(self.var(in_))_0 = std::mem::ManuallyDrop::new(#(self.var(in_)));
+                    let #(self.var(ptr)) = #(self.var(in_))_0.as_ptr() as _;
+                    let #(self.var(len)) = #(self.var(in_))_0.len() as _;
+                    let #(self.var(cap)) = #(self.var(in_))_0.capacity() as _;
+                }
             }
-            AbiType::Stream(ty) => {
-                quote!(Box<dyn Stream<Item = #(self.generate_return_type(ty))> + Send + Unpin + 'static>)
+            Instr::LiftSlice(ptr, len, out, ty) => quote! {
+                let #(self.var(out)): &[#(self.num_type(*ty))] =
+                    unsafe { core::slice::from_raw_parts(#(self.var(ptr)) as _, #(self.var(len)) as _) };
+            },
+            Instr::LowerSlice(in_, ptr, len, _ty) => quote! {
+                let #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
+                let #(self.var(len)) = #(self.var(in_)).len() as _;
+            },
+            Instr::LiftVec(ptr, len, cap, out, ty) => quote! {
+                let #(self.var(out)) = unsafe {
+                    Vec::<#(self.num_type(*ty))>::from_raw_parts(
+                        #(self.var(ptr)) as _,
+                        #(self.var(len)) as _,
+                        #(self.var(cap)) as _,
+                    )
+                };
+            },
+            Instr::LiftRefObject(in_, out, object) => quote! {
+                let #(self.var(out)) = unsafe { &*(#(self.var(in_)) as *const #object) };
+            },
+            Instr::LowerRefObject(in_, out) => quote! {
+                let #(self.var(out)) = #(self.var(in_)) as *const _ as _;
+            },
+            Instr::LiftObject(in_, out, object) => quote! {
+                let #(self.var(out)): Box<#object> = unsafe { Box::from_raw(#(self.var(in_))) };
+            },
+            Instr::LowerObject(in_, out) => quote! {
+                let #(self.var(out)) = Box::into_raw(#(self.var(in_))) as _;
+            },
+            Instr::CallAbi(ty, self_, name, ret, args) => {
+                let invoke = match ty {
+                    FunctionType::Constructor(object) => {
+                        quote!(#object::#name)
+                    }
+                    FunctionType::Method(_) => {
+                        quote!(#(self.var(self_.as_ref().unwrap())).#name)
+                    }
+                    FunctionType::Function => {
+                        quote!(#name)
+                    }
+                };
+                let args = quote!(#(for arg in args => #(self.var(arg))));
+                if let Some(ret) = ret {
+                    quote!(let #(self.var(ret)) = #invoke(#args);)
+                } else {
+                    quote!(#invoke(#args);)
+                }
             }
         }
     }
 
-    fn generate_lower(&self, ret: Option<&AbiType>) -> rust::Tokens {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Num(_) | AbiType::Bool => quote!(ret as _),
-                AbiType::RefStr | AbiType::RefSlice(_) => quote! {
-                    #(self.generate_slice()) {
-                        ptr: ret.as_ptr() as _,
-                        len: ret.len() as _,
-                    }
-                },
-                AbiType::String | AbiType::Vec(_) => quote! {
-                    let ret = std::mem::ManuallyDrop::new(ret);
-                    #(self.generate_alloc()) {
-                        ptr: ret.as_ptr() as _,
-                        len: ret.len() as _,
-                        cap: ret.capacity() as _,
-                    }
-                },
-                AbiType::Object(_) => quote!(ret),
-                AbiType::RefObject(_) => unreachable!(),
-                AbiType::Option(_) => quote! {
-                    match ret {
-                        Some(res) => FfiOption::Some(res),
-                        None => FfiOption::None,
-                    }
-                },
-                AbiType::Result(_) => quote! {
-                    match ret {
-                        Ok(res) => FfiResult::Ok(res),
-                        Err(err) => {
-                            let ret = std::mem::ManuallyDrop::new(err.to_string());
-                            let ret = #(self.generate_alloc()) {
-                                ptr: ret.as_ptr() as _,
-                                len: ret.len() as _,
-                                cap: ret.capacity() as _,
-                            };
-                            FfiResult::Err(ret)
-                        }
-                    }
-                },
-                AbiType::Future(_) => quote!(Box::new(ret)),
-                AbiType::Stream(_) => quote!(Box::new(ret)),
-            }
-        } else {
-            quote! {
-                #[allow(clippy::drop_copy)]
-                drop(ret)
-            }
+    fn var(&self, var: &Var) -> rust::Tokens {
+        quote!(#(format!("tmp{}", var.binding)))
+    }
+
+    fn ty(&self, ty: &AbiType) -> rust::Tokens {
+        match ty {
+            AbiType::Num(num) => self.num_type(*num),
+            _ => unreachable!(),
         }
     }
 
-    fn generate_num_type(&self, ty: NumType) -> rust::Tokens {
+    fn num_type(&self, ty: NumType) -> rust::Tokens {
         match ty {
             NumType::U8 => quote!(u8),
             NumType::U16 => quote!(u16),
             NumType::U32 => quote!(u32),
             NumType::U64 => quote!(u64),
-            NumType::Usize => quote!(usize),
             NumType::I8 => quote!(i8),
             NumType::I16 => quote!(i16),
             NumType::I32 => quote!(i32),
             NumType::I64 => quote!(i64),
-            NumType::Isize => quote!(isize),
             NumType::F32 => quote!(f32),
             NumType::F64 => quote!(f64),
-        }
-    }
-
-    fn generate_usize(&self) -> rust::Tokens {
-        match self.abi.ptr() {
-            FfiType::I32 => quote!(u32),
-            FfiType::I64 => quote!(u64),
-            _ => unimplemented!(),
-        }
-    }
-
-    fn generate_isize(&self) -> rust::Tokens {
-        match self.abi.ptr() {
-            FfiType::I32 => quote!(i32),
-            FfiType::I64 => quote!(i64),
-            _ => unimplemented!(),
         }
     }
 }
@@ -310,7 +228,7 @@ pub mod test_runner {
 
     pub fn compile_pass(iface: &str, api: rust::Tokens, test: rust::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
-        let mut gen = RustGenerator::new(Abi::native());
+        let gen = RustGenerator::new(Abi::native());
         let gen_tokens = gen.generate(iface);
         let tokens = quote! {
             #gen_tokens
