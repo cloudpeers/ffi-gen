@@ -57,6 +57,12 @@ pub struct AbiObject {
     pub destructor: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct AbiStruct {
+    pub name: String,
+    pub fields: Vec<(String, AbiType)>,
+}
+
 #[derive(Default)]
 struct VarGen {
     counter: u32,
@@ -100,14 +106,14 @@ impl Abi {
         return Abi::Native64;
     }
 
-    fn uptr(self) -> NumType {
+    pub fn uptr(self) -> NumType {
         match self {
             Self::Native32 | Self::Wasm32 => NumType::U32,
             Self::Native64 | Self::Wasm64 => NumType::U64,
         }
     }
 
-    fn iptr(self) -> NumType {
+    pub fn iptr(self) -> NumType {
         match self {
             Self::Native32 | Self::Wasm32 => NumType::I32,
             Self::Native64 | Self::Wasm64 => NumType::I64,

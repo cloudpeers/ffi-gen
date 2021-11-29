@@ -243,7 +243,7 @@ impl DartGenerator {
                 quote!(final #(self.ident(out)) = #(self.ident(ret)).#(format!("arg{}", idx));)
             }
             Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
-                quote!(final int #(self.ident(out)) = #(self.ident(in_));)
+                quote!(final #(self.ident(out)) = #(self.ident(in_));)
             }
             Instr::LowerBool(in_, out) => {
                 quote!(final #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
@@ -401,7 +401,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, dart: dart::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let mut rust_gen = RustGenerator::new(Abi::native());
+        let rust_gen = RustGenerator::new(Abi::native());
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut dart_file = NamedTempFile::new()?;
         let dart_gen = DartGenerator::new("compile_pass".to_string());

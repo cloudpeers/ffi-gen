@@ -5,8 +5,8 @@ use crate::{Abi, AbiFunction, AbiType, FunctionType, NumType, Var};
 pub struct Export {
     pub symbol: String,
     pub args: Vec<Var>,
-    pub rets: Vec<Var>,
     pub instr: Vec<Instr>,
+    pub ret: Return,
 }
 
 impl Abi {
@@ -21,6 +21,15 @@ impl Abi {
                 format!("__{}_{}", object, &func.name)
             }
             FunctionType::Function => format!("__{}", &func.name),
+        };
+        let self_ = if let FunctionType::Method(object) = &func.ty {
+            let out = gen.gen(AbiType::RefObject(object.clone()));
+            let ptr = gen.gen_num(self.iptr());
+            def.push(ptr.clone());
+            exports.push(Instr::LiftRefObject(ptr, out.clone(), object.clone()));
+            Some(out)
+        } else {
+            None
         };
         for (_, ty) in func.args.iter() {
             let out = gen.gen(ty.clone());
@@ -93,6 +102,7 @@ impl Abi {
         };
         exports.push(Instr::CallAbi(
             func.ty.clone(),
+            self_,
             func.name.clone(),
             ret.clone(),
             args,
@@ -161,11 +171,16 @@ impl Abi {
                 AbiType::Stream(_) => todo!(),
             }
         }
+        let ret = match rets.len() {
+            0 => Return::Void,
+            1 => Return::Num(rets[0].clone()),
+            _ => Return::Struct(rets, format!("{}Return", symbol)),
+        };
         Export {
             symbol,
             instr: exports,
             args: def,
-            rets,
+            ret,
         }
     }
 }
@@ -190,5 +205,12 @@ pub enum Instr {
     LowerRefObject(Var, Var),
     LiftObject(Var, Var, String),
     LowerObject(Var, Var),
-    CallAbi(FunctionType, String, Option<Var>, Vec<Var>),
+    CallAbi(FunctionType, Option<Var>, String, Option<Var>, Vec<Var>),
+}
+
+#[derive(Clone, Debug)]
+pub enum Return {
+    Void,
+    Num(Var),
+    Struct(Vec<Var>, String),
 }

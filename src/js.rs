@@ -420,7 +420,7 @@ pub mod test_runner {
     pub fn compile_pass(iface: &str, rust: rust::Tokens, js: js::Tokens) -> Result<()> {
         let iface = Interface::parse(iface)?;
         let mut rust_file = NamedTempFile::new()?;
-        let mut rust_gen = RustGenerator::new(Abi::Wasm32);
+        let rust_gen = RustGenerator::new(Abi::Wasm32);
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut js_file = NamedTempFile::new()?;
         let js_gen = JsGenerator::default();

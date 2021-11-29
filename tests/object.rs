@@ -45,12 +45,12 @@ compile_pass! {
     ),
     (
         let boxed = __CustomType_new_(42);
-        assert_eq!(__CustomType_do_something(&boxed), 42);
+        assert_eq!(__CustomType_do_something(boxed), 42);
         drop_box_CustomType(0 as _, boxed);
         assert!(was_dropped());
 
         let boxed = __create(42);
-        assert_eq!(__CustomType_do_something(&boxed), 42);
+        assert_eq!(__CustomType_do_something(boxed), 42);
         drop_box_CustomType(0 as _, boxed);
         assert!(was_dropped());
     ),

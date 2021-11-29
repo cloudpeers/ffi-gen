@@ -75,7 +75,7 @@ compile_pass! {
             arg
         }
     ),
-    ( assert_eq!(__hello_world(true), true); ),
+    ( assert_eq!(__hello_world(1), 1); ),
     ( assert(api.hello_world(true) == true); ),
     ( assert.strictEqual(api.hello_world(true), true); ),
     (
@@ -200,7 +200,7 @@ compile_pass! {
     ),
     (
         let ret = __make_string();
-        let s = unsafe { String::from_raw_parts(ret.ptr as _, ret.len as _, ret.cap as _) };
+        let s = unsafe { String::from_raw_parts(ret.ret0 as _, ret.ret1 as _, ret.ret2 as _) };
         assert_eq!(s.as_str(), "hello world");
     ),
     ( assert(api.make_string() == "hello world"); ),
@@ -228,7 +228,7 @@ compile_pass! {
     (
         let s = "hello world";
         let ret = __as_str(s.as_ptr() as _, s.len() as _);
-        let slice = unsafe { core::slice::from_raw_parts(ret.ptr as _, ret.len as _) };
+        let slice = unsafe { core::slice::from_raw_parts(ret.ret0 as _, ret.ret1 as _) };
         let s2 = unsafe { std::str::from_utf8_unchecked(slice) };
         assert_eq!(s, s2);
     ),
@@ -305,37 +305,6 @@ compile_pass! {
 
         drop(): void;
     })
-
-}
-
-compile_pass! {
-    args_vec_isize_ret_vec_isize,
-    "reverse fn(b: Vec<isize>) -> Vec<isize>;",
-    (
-        pub fn reverse(b: Vec<isize>) -> Vec<isize> {
-            b.into_iter().rev().collect()
-        }
-    ),
-    ( ),
-    (
-        assert(api.reverse([]).equals([]));
-        assert(api.reverse([0, 1, 2, 3, 4]).equals([4, 3, 2, 1, 0]));
-    ),
-    (
-        assert.deepEqual(api.reverse([]), []);
-        assert.deepEqual(api.reverse([0, 1, 2, 3, 4]), [4, 3, 2, 1, 0]);
-    ),
-    (
-    export class Api {
-        constructor();
-
-        fetch(url, imports): Promise<void>;
-
-        reverse(b: Array<number>): Array<number>;
-
-        drop(): void;
-    })
-
 }
 
 /*compile_pass! {

@@ -29,7 +29,7 @@ compile_pass! {
     ),
     (
         let boxed = __make_box();
-        drop_box_CustomType(core::ptr::null(), boxed);
+        drop_box_CustomType(0, boxed);
         assert!(was_dropped());
     ),
     (
