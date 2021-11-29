@@ -1,5 +1,5 @@
 use crate::import::Instr;
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Var};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -313,16 +313,21 @@ impl JsGenerator {
                         #api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
                 const #(self.ident(out)) = Array.from(#(self.ident(out))_0);
             },
-            Instr::Call(symbol, ret, args) => quote! {
-                const #(self.ident(ret)) = #api.instance.exports.#symbol(#(for arg in args => #(self.ident(arg)),));
-            },
+            Instr::Call(symbol, ret, args) => {
+                let invoke = quote!(#api.instance.exports.#symbol(#(for arg in args => #(self.ident(arg)),)););
+                if let Some(ret) = ret {
+                    quote!(const #(self.ident(ret)) = #invoke)
+                } else {
+                    invoke
+                }
+            }
             Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
             Instr::ReturnVoid => quote!(return;),
         }
     }
 
-    fn ident(&self, ident: &u32) -> js::Tokens {
-        quote!(#(format!("tmp{}", ident)))
+    fn ident(&self, var: &Var) -> js::Tokens {
+        quote!(#(format!("tmp{}", var.binding)))
     }
 
     fn generate_array(&self, ty: NumType) -> js::Tokens {

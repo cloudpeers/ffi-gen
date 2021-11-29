@@ -1,5 +1,5 @@
 use super::VarGen;
-use crate::{Abi, AbiFunction, AbiType, FunctionType, NumType, Var};
+use crate::{Abi, AbiFunction, AbiType, FunctionType, NumType, Return, Var};
 
 #[derive(Clone, Debug)]
 pub struct Export {
@@ -202,11 +202,4 @@ pub enum Instr {
     LiftObject(Var, Var, String),
     LowerObject(Var, Var),
     CallAbi(FunctionType, Option<Var>, String, Option<Var>, Vec<Var>),
-}
-
-#[derive(Clone, Debug)]
-pub enum Return {
-    Void,
-    Num(Var),
-    Struct(Vec<Var>, String),
 }

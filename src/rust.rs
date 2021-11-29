@@ -1,5 +1,5 @@
-use crate::export::{Instr, Return};
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Var};
+use crate::export::Instr;
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
 use genco::prelude::*;
 
 pub struct RustGenerator {
