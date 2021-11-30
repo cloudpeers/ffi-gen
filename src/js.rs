@@ -375,6 +375,12 @@ pub struct WasmMultiValueShim {
     abi: Abi,
 }
 
+impl Default for WasmMultiValueShim {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmMultiValueShim {
     pub fn new() -> Self {
         Self { abi: Abi::Wasm32 }
