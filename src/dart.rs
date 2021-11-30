@@ -307,9 +307,16 @@ impl DartGenerator {
                     return null;
                 }
             },
-            Instr::HandleError(var) => quote! {
+            Instr::HandleError(var, ptr, len, cap) => quote! {
                 if (#(self.var(var)) == 0) {
-                    throw "error";
+                    final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+                    final #(self.var(var))_0 = utf8.decode(#(self.var(ptr))_0.asTypedList(#(self.var(len))));
+                    if (#(self.var(len)) > 0) {
+                        final ffi.Pointer<ffi.Void> #(self.var(ptr))_0;
+                        #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+                        #api.deallocate(#(self.var(ptr))_0, #(self.var(cap)), 1);
+                    }
+                    throw #(self.var(var))_0;
                 }
             },
         }

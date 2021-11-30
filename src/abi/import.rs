@@ -179,8 +179,14 @@ impl Abi {
             }
             AbiType::Result(ty) => {
                 let var = gen.gen_num(NumType::U8);
+                let ptr = gen.gen_num(self.iptr());
+                let len = gen.gen_num(self.uptr());
+                let cap = gen.gen_num(self.uptr());
                 rets.push(var.clone());
-                import.push(Instr::HandleError(var));
+                rets.push(ptr.clone());
+                rets.push(len.clone());
+                rets.push(cap.clone());
+                import.push(Instr::HandleError(var, ptr, len, cap));
                 self.import_return(&**ty, out, gen, rets, import);
             }
             AbiType::Future(_ty) => todo!(),
@@ -263,6 +269,6 @@ pub enum Instr {
     ReturnValue(Var),
     ReturnVoid,
     HandleNull(Var),
-    HandleError(Var),
+    HandleError(Var, Var, Var, Var),
     BindRets(Var, Vec<Var>),
 }
