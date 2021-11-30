@@ -307,12 +307,16 @@ compile_pass! {
     })
 }
 
-/*compile_pass! {
-    args_opt_i64_ret_opt_i64,
-    "identity fn(arg: Option<i64>) -> Option<i64>;",
+compile_pass! {
+    args_i64_ret_opt_i64,
+    "non_zero fn(num: i64) -> Option<i64>;",
     (
-        pub fn identity(opt: Option<i64>) -> Option<i64> {
-            opt
+        pub fn non_zero(num: i64) -> Option<i64> {
+            if num > 0 {
+                Some(num)
+            } else {
+                None
+            }
         }
     ),
     ( ),
@@ -325,4 +329,28 @@ compile_pass! {
         //assert.equals(api.identity(42), 42);
     ),
     ( )
-}*/
+}
+
+compile_pass! {
+    args_i64_ret_res_i64,
+    "non_zero fn(num: i64) -> Result<i64>;",
+    (
+        pub fn non_zero(num: i64) -> anyhow::Result<i64> {
+            if num > 0 {
+                Ok(num)
+            } else {
+                Err(anyhow::anyhow!("is zero"))
+            }
+        }
+    ),
+    ( ),
+    (
+        //assert(api.identity(null) == null);
+        //assert(api.identity(42)! == 42);
+    ),
+    (
+        //assert.equals(api.identity(null), null);
+        //assert.equals(api.identity(42), 42);
+    ),
+    ( )
+}

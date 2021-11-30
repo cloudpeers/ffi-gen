@@ -106,13 +106,15 @@ impl RustGenerator {
 
     fn instr(&self, instr: &Instr) -> rust::Tokens {
         match instr {
-            Instr::LiftIsize(in_, out)
-            | Instr::LiftUsize(in_, out)
+            Instr::LiftNum(in_, out) | Instr::LiftIsize(in_, out) | Instr::LiftUsize(in_, out) => {
+                quote!(let #(self.var(out)) = #(self.var(in_)) as _;)
+            }
+            Instr::LowerNum(in_, out)
             | Instr::LowerIsize(in_, out)
-            | Instr::LowerUsize(in_, out) => quote!(let #(self.var(out)) = #(self.var(in_)) as _;),
+            | Instr::LowerUsize(in_, out) => quote!(#(self.var(out)) = #(self.var(in_)) as _;),
             Instr::LiftBool(in_, out) => quote!(let #(self.var(out)) = #(self.var(in_)) > 0;),
             Instr::LowerBool(in_, out) => {
-                quote!(let #(self.var(out)) = if #(self.var(in_)) { 1 } else { 0 };)
+                quote!(#(self.var(out)) = if #(self.var(in_)) { 1 } else { 0 };)
             }
             Instr::LiftStr(ptr, len, out) => quote! {
                 let #(self.var(out))_0: &[u8] =
@@ -120,8 +122,8 @@ impl RustGenerator {
                 let #(self.var(out)): &str = unsafe { std::str::from_utf8_unchecked(#(self.var(out))_0) };
             },
             Instr::LowerStr(in_, ptr, len) => quote! {
-                let #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
-                let #(self.var(len)) = #(self.var(in_)).len() as _;
+                #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
+                #(self.var(len)) = #(self.var(in_)).len() as _;
             },
             Instr::LiftString(ptr, len, cap, out) => quote! {
                 let #(self.var(out)) = unsafe {
@@ -135,9 +137,9 @@ impl RustGenerator {
             Instr::LowerString(in_, ptr, len, cap) | Instr::LowerVec(in_, ptr, len, cap, _) => {
                 quote! {
                     let #(self.var(in_))_0 = std::mem::ManuallyDrop::new(#(self.var(in_)));
-                    let #(self.var(ptr)) = #(self.var(in_))_0.as_ptr() as _;
-                    let #(self.var(len)) = #(self.var(in_))_0.len() as _;
-                    let #(self.var(cap)) = #(self.var(in_))_0.capacity() as _;
+                    #(self.var(ptr)) = #(self.var(in_))_0.as_ptr() as _;
+                    #(self.var(len)) = #(self.var(in_))_0.len() as _;
+                    #(self.var(cap)) = #(self.var(in_))_0.capacity() as _;
                 }
             }
             Instr::LiftSlice(ptr, len, out, ty) => quote! {
@@ -145,8 +147,8 @@ impl RustGenerator {
                     unsafe { core::slice::from_raw_parts(#(self.var(ptr)) as _, #(self.var(len)) as _) };
             },
             Instr::LowerSlice(in_, ptr, len, _ty) => quote! {
-                let #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
-                let #(self.var(len)) = #(self.var(in_)).len() as _;
+                #(self.var(ptr)) = #(self.var(in_)).as_ptr() as _;
+                #(self.var(len)) = #(self.var(in_)).len() as _;
             },
             Instr::LiftVec(ptr, len, cap, out, ty) => quote! {
                 let #(self.var(out)) = unsafe {
@@ -161,13 +163,34 @@ impl RustGenerator {
                 let #(self.var(out)) = unsafe { &*(#(self.var(in_)) as *const #object) };
             },
             Instr::LowerRefObject(in_, out) => quote! {
-                let #(self.var(out)) = #(self.var(in_)) as *const _ as _;
+                #(self.var(out)) = #(self.var(in_)) as *const _ as _;
             },
             Instr::LiftObject(in_, out, object) => quote! {
                 let #(self.var(out)): Box<#object> = unsafe { Box::from_raw(#(self.var(in_))) };
             },
             Instr::LowerObject(in_, out) => quote! {
-                let #(self.var(out)) = Box::into_raw(#(self.var(in_))) as _;
+                #(self.var(out)) = Box::into_raw(#(self.var(in_))) as _;
+            },
+            Instr::LowerOption(in_, var, some, some_instr) => quote! {
+                #(self.var(var)) = if let Some(#(self.var(some))) = #(self.var(in_)) {
+                    #(for instr in some_instr => #(self.instr(instr)))
+                    0
+                } else {
+                    1
+                };
+            },
+            Instr::LowerResult(in_, var, ok, ok_instr, err, err_instr) => quote! {
+                #(self.var(var)) = match #(self.var(in_)) {
+                    Ok(#(self.var(ok))) => {
+                        #(for instr in ok_instr => #(self.instr(instr)))
+                        0
+                    }
+                    Err(#(self.var(err))_0) => {
+                        let #(self.var(err)) = #(self.var(err))_0.to_string();
+                        #(for instr in err_instr => #(self.instr(instr)))
+                        1
+                    }
+                };
             },
             Instr::CallAbi(ty, self_, name, ret, args) => {
                 let invoke = match ty {
@@ -188,6 +211,9 @@ impl RustGenerator {
                     quote!(#invoke(#args);)
                 }
             }
+            Instr::DefineRets(vars) => quote! {
+                #(for var in vars => #[allow(unused_assignments)] let mut #(self.var(var)) = Default::default();)
+            },
         }
     }
 
