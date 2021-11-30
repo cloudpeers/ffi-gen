@@ -335,11 +335,11 @@ compile_pass! {
     args_i64_ret_res_i64,
     "non_zero fn(num: i64) -> Result<i64>;",
     (
-        pub fn non_zero(num: i64) -> anyhow::Result<i64> {
+        pub fn non_zero(num: i64) -> Result<i64, &'static str> {
             if num > 0 {
                 Ok(num)
             } else {
-                Err(anyhow::anyhow!("is zero"))
+                Err("is zero")
             }
         }
     ),

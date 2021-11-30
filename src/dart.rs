@@ -223,82 +223,99 @@ impl DartGenerator {
 
     fn generate_instr(&self, api: &dart::Tokens, instr: &Instr) -> dart::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(final #(self.ident(out)) = this._box.borrow();),
+            Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = this._box.borrow();),
             Instr::BorrowObject(in_, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_))._box.borrow();)
+                quote!(final #(self.var(out)) = #(self.var(in_))._box.borrow();)
             }
             Instr::MoveObject(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_))._box.move();)
+                quote!(final #(self.var(out)) = #(self.var(in_))._box.move();)
             }
             Instr::MakeObject(obj, box_, drop, out) => quote! {
-                final ffi.Pointer<ffi.Void> #(self.ident(box_))_0 = ffi.Pointer.fromAddress(#(self.ident(box_)));
-                final #(self.ident(box_))_1 = new Box(#api, #(self.ident(box_))_0, #_(#drop));
-                #(self.ident(box_))_1._finalizer = _registerFinalizer(#(self.ident(box_))_1);
-                final #(self.ident(out)) = new #obj._(#api, #(self.ident(box_))_1);
+                final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
+                final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
+                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                final #(self.var(out)) = new #obj._(#api, #(self.var(box_))_1);
             },
-            Instr::BindArg(arg, out) => quote!(final #(self.ident(out)) = #arg;),
-            Instr::BindRet(ret, idx, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(ret)).#(format!("arg{}", idx));)
+            Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #arg;),
+            Instr::BindRets(ret, vars) => {
+                if vars.len() > 1 {
+                    quote! {
+                        #(for (idx, var) in vars.iter().enumerate() =>
+                            final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
+                    }
+                } else {
+                    quote!(final #(self.var(&vars[0])) = #(self.var(ret));)
+                }
             }
             Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_));)
+                quote!(final #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
+                quote!(final #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_)) > 0;)
+                quote!(final #(self.var(out)) = #(self.var(in_)) > 0;)
             }
             Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
-                quote!(final #(self.ident(out)) = #(self.ident(in_)).length;)
+                quote!(final #(self.var(out)) = #(self.var(in_)).length;)
             }
             Instr::Allocate(ptr, len, size, align) => {
-                quote!(final #(self.ident(ptr)) = #api.allocate(#(self.ident(len)) * #(*size), #(*align)).address;)
+                quote!(final #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align)).address;)
             }
             Instr::Deallocate(ptr, len, size, align) => quote! {
-                if (#(self.ident(len)) > 0) {
-                    final ffi.Pointer<ffi.Void> #(self.ident(ptr))_0;
-                    #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
-                    #api.deallocate(#(self.ident(ptr))_0, #(self.ident(len)) * #(*size), #(*align));
+                if (#(self.var(len)) > 0) {
+                    final ffi.Pointer<ffi.Void> #(self.var(ptr))_0;
+                    #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+                    #api.deallocate(#(self.var(ptr))_0, #(self.var(len)) * #(*size), #(*align));
                 }
             },
             Instr::LowerString(in_, ptr, len) => quote! {
-                final ffi.Pointer<ffi.Uint8> #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
-                final #(self.ident(in_))_0 = utf8.encode(#(self.ident(in_)));
-                final Uint8List #(self.ident(in_))_1 = #(self.ident(ptr))_0.asTypedList(#(self.ident(len)));
-                #(self.ident(in_))_1.setAll(0, #(self.ident(in_))_0);
+                final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+                final #(self.var(in_))_0 = utf8.encode(#(self.var(in_)));
+                final Uint8List #(self.var(in_))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
+                #(self.var(in_))_1.setAll(0, #(self.var(in_))_0);
             },
             Instr::LiftString(ptr, len, out) => quote! {
-                final ffi.Pointer<ffi.Uint8> #(self.ident(ptr))_0 = ffi.Pointer.fromAddress(#(self.ident(ptr)));
-                final #(self.ident(out)) = utf8.decode(#(self.ident(ptr))_0.asTypedList(#(self.ident(len))));
+                final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+                final #(self.var(out)) = utf8.decode(#(self.var(ptr))_0.asTypedList(#(self.var(len))));
             },
             Instr::LowerVec(in_, ptr, len, ty) => quote! {
-                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.ident(ptr))_0 =
-                    ffi.Pointer.fromAddress(#(self.ident(ptr)));
-                final #(self.ident(in_))_1 = #(self.ident(ptr))_0.asTypedList(#(self.ident(len)));
-                #(self.ident(in_))_1.setAll(0, #(self.ident(in_)));
+                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
+                    ffi.Pointer.fromAddress(#(self.var(ptr)));
+                final #(self.var(in_))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
+                #(self.var(in_))_1.setAll(0, #(self.var(in_)));
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
-                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.ident(ptr))_0 =
-                    ffi.Pointer.fromAddress(#(self.ident(ptr)));
-                final #(self.ident(out)) = #(self.ident(ptr))_0.asTypedList(#(self.ident(len))).toList();
+                final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
+                    ffi.Pointer.fromAddress(#(self.var(ptr)));
+                final #(self.var(out)) = #(self.var(ptr))_0.asTypedList(#(self.var(len))).toList();
             },
             Instr::Call(symbol, ret, args) => {
-                let invoke = quote!(#api.#symbol(#(for arg in args => #(self.ident(arg)),)););
+                let invoke = quote!(#api.#symbol(#(for arg in args => #(self.var(arg)),)););
                 if let Some(ret) = ret {
-                    quote!(final #(self.ident(ret)) = #invoke)
+                    quote!(final #(self.var(ret)) = #invoke)
                 } else {
                     invoke
                 }
             }
-            Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
+            Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
+            Instr::HandleNull(var) => quote! {
+                if (#(self.var(var)) == 0) {
+                    return null;
+                }
+            },
+            Instr::HandleError(var) => quote! {
+                if (#(self.var(var)) == 0) {
+                    throw "error";
+                }
+            },
         }
     }
 
-    fn ident(&self, var: &Var) -> dart::Tokens {
+    fn var(&self, var: &Var) -> dart::Tokens {
         quote!(#(format!("tmp{}", var.binding)))
     }
 
@@ -329,8 +346,8 @@ impl DartGenerator {
                 quote!(List<#(self.generate_wrapped_num_type(*ty))>)
             }
             AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty),
-            AbiType::Option(_) => todo!(),
-            AbiType::Result(_) => todo!(),
+            AbiType::Option(ty) => quote!(#(self.generate_type(&**ty))?),
+            AbiType::Result(ty) => self.generate_type(&**ty),
             AbiType::Future(_) => todo!(),
             AbiType::Stream(_) => todo!(),
         }

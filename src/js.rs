@@ -1,5 +1,5 @@
 use crate::import::Instr;
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Var};
+use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
 use genco::prelude::*;
 
 pub struct JsGenerator {
@@ -250,83 +250,101 @@ impl JsGenerator {
 
     fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(const #(self.ident(out)) = this.box.borrow();),
+            Instr::BorrowSelf(out) => quote!(const #(self.var(out)) = this.box.borrow();),
             Instr::BorrowObject(in_, out) => {
-                quote!(const #(self.ident(out)) = #(self.ident(in_)).box.borrow();)
+                quote!(const #(self.var(out)) = #(self.var(in_)).box.borrow();)
             }
             Instr::MoveObject(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
-                quote!(const #(self.ident(out)) = #(self.ident(in_)).box.move();)
+                quote!(const #(self.var(out)) = #(self.var(in_)).box.move();)
             }
             Instr::MakeObject(obj, box_, drop, out) => quote! {
-                const #(self.ident(box_))_0 = () => { #api.drop(#_(#drop), #(self.ident(box_))); };
-                const #(self.ident(box_))_1 = new Box(#(self.ident(box_)), #(self.ident(box_))_0);
-                const #(self.ident(out)) = new #obj(#api, #(self.ident(box_))_1);
+                const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
+                const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
+                const #(self.var(out)) = new #obj(#api, #(self.var(box_))_1);
             },
-            Instr::BindArg(arg, out) => quote!(const #(self.ident(out)) = #arg;),
-            Instr::BindRet(ret, idx, out) => {
-                quote!(const #(self.ident(out)) = #(self.ident(ret))[#(*idx)];)
+            Instr::BindArg(arg, out) => quote!(const #(self.var(out)) = #arg;),
+            Instr::BindRets(ret, vars) => {
+                if vars.len() > 1 {
+                    quote! {
+                        #(for (idx, var) in vars.iter().enumerate() =>
+                            const #(self.var(var)) = #(self.var(ret))[#(idx)];)
+                    }
+                } else {
+                    quote!(const #(self.var(&vars[0])) = #(self.var(ret));)
+                }
             }
             // Casts below i32 are no ops as wasm only has i32 and i64
             // TODO
             Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
-                quote!(const #(self.ident(out)) = #(self.ident(in_));)
+                quote!(const #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(const #(self.ident(out)) = #(self.ident(in_)) ? 1 : 0;)
+                quote!(const #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
-            Instr::LiftBool(in_, out) => quote!(const #(self.ident(out)) = #(self.ident(in_)) > 0;),
+            Instr::LiftBool(in_, out) => quote!(const #(self.var(out)) = #(self.var(in_)) > 0;),
             Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
-                quote!(const #(self.ident(out)) = #(self.ident(in_)).length;)
+                quote!(const #(self.var(out)) = #(self.var(in_)).length;)
             }
             Instr::Allocate(ptr, len, size, align) => {
-                quote!(const #(self.ident(ptr)) = #api.allocate(#(self.ident(len)) * #(*size), #(*align));)
+                quote!(const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));)
             }
             Instr::Deallocate(ptr, len, size, align) => quote! {
-                if (#(self.ident(len)) > 0) {
-                    #api.deallocate(#(self.ident(ptr)), #(self.ident(len)) * #(*size), #(*align));
+                if (#(self.var(len)) > 0) {
+                    #api.deallocate(#(self.var(ptr)), #(self.var(len)) * #(*size), #(*align));
                 }
             },
             Instr::LowerString(in_, ptr, len) => quote! {
-                const #(self.ident(in_))_0 =
-                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
-                const #(self.ident(in_))_1 = new TextEncoder();
-                #(self.ident(in_))_1.encodeInto(#(self.ident(in_)), #(self.ident(in_))_0);
+                const #(self.var(in_))_0 =
+                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
+                const #(self.var(in_))_1 = new TextEncoder();
+                #(self.var(in_))_1.encodeInto(#(self.var(in_)), #(self.var(in_))_0);
             },
             Instr::LiftString(ptr, len, out) => quote! {
-                const #(self.ident(out))_0 =
-                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
-                const #(self.ident(out))_1 = new TextDecoder();
-                const #(self.ident(out)) = #(self.ident(out))_1.decode(#(self.ident(out))_0);
+                const #(self.var(out))_0 =
+                    new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
+                const #(self.var(out))_1 = new TextDecoder();
+                const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
 
             Instr::LowerVec(in_, ptr, len, ty) => quote! {
-                const #(self.ident(in_))_0 =
+                const #(self.var(in_))_0 =
                     new #(self.generate_array(*ty))(
-                        #api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
-                #(self.ident(in_))_0.set(#(self.ident(in_)), 0);
+                        #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
+                #(self.var(in_))_0.set(#(self.var(in_)), 0);
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
-                const #(self.ident(out))_0 =
+                const #(self.var(out))_0 =
                     new #(self.generate_array(*ty))(
-                        #api.instance.exports.memory.buffer, #(self.ident(ptr)), #(self.ident(len)));
-                const #(self.ident(out)) = Array.from(#(self.ident(out))_0);
+                        #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
+                const #(self.var(out)) = Array.from(#(self.var(out))_0);
             },
             Instr::Call(symbol, ret, args) => {
-                let invoke = quote!(#api.instance.exports.#symbol(#(for arg in args => #(self.ident(arg)),)););
+                let invoke =
+                    quote!(#api.instance.exports.#symbol(#(for arg in args => #(self.var(arg)),)););
                 if let Some(ret) = ret {
-                    quote!(const #(self.ident(ret)) = #invoke)
+                    quote!(const #(self.var(ret)) = #invoke)
                 } else {
                     invoke
                 }
             }
-            Instr::ReturnValue(ret) => quote!(return #(self.ident(ret));),
+            Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
+            Instr::HandleNull(var) => quote! {
+                if (#(self.var(var)) === 0) {
+                    return null;
+                }
+            },
+            Instr::HandleError(var) => quote! {
+                if (#(self.var(var)) === 0) {
+                    throw "error";
+                }
+            },
         }
     }
 
-    fn ident(&self, var: &Var) -> js::Tokens {
+    fn var(&self, var: &Var) -> js::Tokens {
         quote!(#(format!("tmp{}", var.binding)))
     }
 
@@ -346,11 +364,17 @@ impl JsGenerator {
     }
 }
 
-pub struct WasmMultiValueShim;
+pub struct WasmMultiValueShim {
+    abi: Abi,
+}
 
 impl WasmMultiValueShim {
-    pub fn generate(path: &str, iface: Interface) -> rust::Tokens {
-        let args = Self::generate_args(iface);
+    pub fn new() -> Self {
+        Self { abi: Abi::Wasm32 }
+    }
+
+    pub fn generate(&self, path: &str, iface: Interface) -> rust::Tokens {
+        let args = self.generate_args(iface);
         if !args.is_empty() {
             quote! {
                 let ret = Command::new("multi-value-reverse-polyfill")
@@ -374,41 +398,39 @@ impl WasmMultiValueShim {
         }
     }
 
-    fn generate_args(iface: Interface) -> Vec<String> {
+    fn generate_args(&self, iface: Interface) -> Vec<String> {
         let mut funcs = vec![];
         for obj in iface.objects() {
             for func in &obj.methods {
-                if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
-                    funcs.push(format!("\"__{}_{} {}\"", &obj.name, &func.name, ret))
+                if let Some(func) = self.generate_return(func) {
+                    funcs.push(func)
                 }
             }
         }
         for func in iface.functions() {
-            if let Some(ret) = Self::generate_return(func.ret.as_ref()) {
-                funcs.push(format!("\"__{} {}\"", &func.name, ret))
+            if let Some(func) = self.generate_return(&func) {
+                funcs.push(func)
             }
         }
         funcs
     }
 
-    fn generate_return(ret: Option<&AbiType>) -> Option<&'static str> {
-        if let Some(ret) = ret {
-            match ret {
-                AbiType::Num(_)
-                | AbiType::Isize
-                | AbiType::Usize
-                | AbiType::Bool
-                | AbiType::RefObject(_)
-                | AbiType::Object(_) => None,
-                AbiType::RefStr | AbiType::RefSlice(_) => Some("i32 i32"),
-                AbiType::String | AbiType::Vec(_) => Some("i32 i32 i32"),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::Future(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
+    fn generate_return(&self, func: &AbiFunction) -> Option<String> {
+        let ffi = self.abi.export(func);
+        match &ffi.ret {
+            Return::Struct(fields, _) => {
+                let mut ret = String::new();
+                for field in fields {
+                    let (size, _) = self.abi.layout(field.ty.num());
+                    if size > 4 {
+                        ret.push_str("i64 ");
+                    } else {
+                        ret.push_str("i32 ");
+                    }
+                }
+                Some(format!("\"{} {}\"", ffi.symbol, ret))
             }
-        } else {
-            None
+            _ => None,
         }
     }
 }
@@ -471,7 +493,7 @@ pub mod test_runner {
         js_file.write_all(bin.as_bytes())?;
 
         let wasm_multi_value =
-            WasmMultiValueShim::generate(library_file.as_ref().to_str().unwrap(), iface);
+            WasmMultiValueShim::new().generate(library_file.as_ref().to_str().unwrap(), iface);
 
         let runner_tokens: rust::Tokens = quote! {
             fn main() {

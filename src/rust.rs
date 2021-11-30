@@ -174,21 +174,21 @@ impl RustGenerator {
             Instr::LowerOption(in_, var, some, some_instr) => quote! {
                 #(self.var(var)) = if let Some(#(self.var(some))) = #(self.var(in_)) {
                     #(for instr in some_instr => #(self.instr(instr)))
-                    0
-                } else {
                     1
+                } else {
+                    0
                 };
             },
             Instr::LowerResult(in_, var, ok, ok_instr, err, err_instr) => quote! {
                 #(self.var(var)) = match #(self.var(in_)) {
                     Ok(#(self.var(ok))) => {
                         #(for instr in ok_instr => #(self.instr(instr)))
-                        0
+                        1
                     }
                     Err(#(self.var(err))_0) => {
                         let #(self.var(err)) = #(self.var(err))_0.to_string();
                         #(for instr in err_instr => #(self.instr(instr)))
-                        1
+                        0
                     }
                 };
             },
