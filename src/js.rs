@@ -336,9 +336,16 @@ impl JsGenerator {
                     return null;
                 }
             },
-            Instr::HandleError(var) => quote! {
+            Instr::HandleError(var, ptr, len, cap) => quote! {
                 if (#(self.var(var)) === 0) {
-                    throw "error";
+                    const #(self.var(var))_0 =
+                        new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
+                    const #(self.var(var))_1 = new TextDecoder();
+                    const #(self.var(var))_2 = #(self.var(var))_1.decode(#(self.var(var))_0);
+                    if (#(self.var(len)) > 0) {
+                        #api.deallocate(#(self.var(ptr)), #(self.var(cap)), 1);
+                    }
+                    throw #(self.var(var))_2;
                 }
             },
         }

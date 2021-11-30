@@ -321,12 +321,12 @@ compile_pass! {
     ),
     ( ),
     (
-        //assert(api.identity(null) == null);
-        //assert(api.identity(42)! == 42);
+        assert(api.non_zero(0) == null);
+        assert(api.non_zero(42)! == 42);
     ),
     (
-        //assert.equals(api.identity(null), null);
-        //assert.equals(api.identity(42), 42);
+        assert.equal(api.non_zero(0n), null);
+        assert.equal(api.non_zero(42n), 42);
     ),
     ( )
 }
@@ -345,12 +345,28 @@ compile_pass! {
     ),
     ( ),
     (
-        //assert(api.identity(null) == null);
-        //assert(api.identity(42)! == 42);
+        assert(api.non_zero(42) == 42);
+
+        var err = false;
+        try {
+            api.non_zero(0);
+        } catch(e) {
+            err = true;
+            assert(e == "is zero");
+        }
+        assert(err);
     ),
     (
-        //assert.equals(api.identity(null), null);
-        //assert.equals(api.identity(42), 42);
+        assert.equal(api.non_zero(42n), 42);
+
+        let err = false;
+        try {
+            api.non_zero(0n);
+        } catch(e) {
+            err = true;
+            assert.equal(e, "is zero");
+        }
+        assert.equal(err, true);
     ),
     ( )
 }
