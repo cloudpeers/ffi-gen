@@ -163,10 +163,10 @@ impl Abi {
                 let ok = gen.gen((&**ty).clone());
                 let err = gen.gen(AbiType::String);
                 rets.push(var.clone());
-                let mut ok_instr = vec![];
-                self.export_return(ok.clone(), gen, &mut ok_instr, rets);
                 let mut err_instr = vec![];
                 self.export_return(err.clone(), gen, &mut err_instr, rets);
+                let mut ok_instr = vec![];
+                self.export_return(ok.clone(), gen, &mut ok_instr, rets);
                 exports.push(Instr::LowerResult(ret, var, ok, ok_instr, err, err_instr));
             }
             AbiType::Future(_) => todo!(),
