@@ -33,7 +33,10 @@ compile_pass! {
         assert!(was_dropped());
     ),
     (
-        final boxed = api.make_box();
+        final f = () {
+            final boxed = api.make_box();
+        };
+        f();
         //boxed.drop();
         //assert(api.was_dropped());
         final largeList = [];
