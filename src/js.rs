@@ -114,6 +114,8 @@ impl JsGenerator {
                 });
             }
 
+            const { ReadableStream } = require("node:stream/web");
+
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
             // gets the wasm at a url and instantiates it.
@@ -190,11 +192,14 @@ impl JsGenerator {
                     this.callbacks = {};
                 }
 
-                registerNotifier(notifier) {
+                reserveSlot() {
                     const idx = this.counter;
                     this.counter += 1;
-                    this.callbacks[idx] = notifier(idx);
                     return idx;
+                }
+
+                registerNotifier(idx, notifier) {
+                    this.callbacks[idx] = notifier;
                 }
 
                 unregisterNotifier(idx) {
@@ -214,9 +219,35 @@ impl JsGenerator {
                     }
                 };
                 return new Promise((resolve, _) => {
-                    const notifier = (idx) => () => poll(resolve, idx);
-                    const idx = notifierRegistry.registerNotifier(notifier);
+                    const idx = notifierRegistry.reserveSlot();
+                    const notifier = () => poll(resolve, idx);
+                    notifierRegistry.registerNotifier(idx, notifier);
                     poll(resolve, idx);
+                });
+            };
+
+            const nativeStream = (box, nativePoll) => {
+                const poll = (next, nextIdx, doneIdx) => {
+                    const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));
+                    if (ret != null) {
+                        next(ret);
+                    }
+                };
+                return new ReadableStream({
+                    start(controller) {
+                        const nextIdx = notifierRegistry.reserveSlot();
+                        const doneIdx = notifierRegistry.reserveSlot();
+                        const nextNotifier = () => poll(controller.enqueue, nextIdx, doneIdx);
+                        const doneNotifier = () => {
+                            notifierRegistry.unregisterNotifier(nextIdx);
+                            notifierRegistry.unregisterNotifier(doneIdx);
+                            controller.close();
+                            box.drop();
+                        };
+                        notifierRegistry.registerNotifier(nextIdx, nextNotifier);
+                        notifierRegistry.registerNotifier(doneIdx, doneNotifier);
+                        poll(controller.enqueue, nextIdx, doneIdx);
+                    },
                 });
             };
 
@@ -410,8 +441,8 @@ impl JsGenerator {
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
-                const #(self.var(out)) = nativeStream(#(self.var(box_))_1, (a, b, c) => {
-                    return #api.#poll(a, b, c);
+                const #(self.var(out)) = nativeStream(#(self.var(box_))_1, (a, b, c, d) => {
+                    return #api.#poll(a, b, c, d);
                 });
             },
         }
