@@ -116,6 +116,32 @@ impl DartGenerator {
                 return completer.future;
             }
 
+            Stream<T> _nativeStream<T>(Box box, T? Function(int, int, int, int) nativePoll) {
+                final controller = StreamController<T>();
+                final rx = ReceivePort();
+                final done = ReceivePort();
+                final poll = () {
+                    final ret = nativePoll(
+                        box.borrow(),
+                        ffi.NativeApi.postCObject.address,
+                        rx.sendPort.nativePort,
+                        done.sendPort.nativePort,
+                    );
+                    if (ret != null) {
+                        controller.add(ret);
+                    }
+                };
+                rx.listen((dynamic _message) => poll());
+                done.listen((dynamic _message) {
+                    rx.close();
+                    done.close();
+                    controller.close();
+                    box.drop();
+                });
+                poll();
+                return controller.stream;
+            }
+
             class Api {
                 #(static_literal("///")) Holds the symbol lookup function.
                 final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)

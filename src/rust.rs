@@ -94,9 +94,20 @@ impl RustGenerator {
                 }
             }
 
-            #[cfg(target_family = "wasm")]
-            extern "C" {
-                fn __notifier_callback(idx: i32);
+            fn ffi_waker(_post_cobject: isize, port: i64) -> Waker {
+                waker_fn(move || unsafe {
+                    if cfg!(target_family = "wasm") {
+                        extern "C" {
+                            fn __notifier_callback(idx: i32);
+                        }
+                        __notifier_callback(port as _);
+                    } else {
+                        let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
+                            core::mem::transmute(_post_cobject);
+                        let obj: i32 = 0;
+                        post_cobject(port, &obj as *const _ as *const _);
+                    }
+                })
             }
 
             #[repr(transparent)]
@@ -107,18 +118,8 @@ impl RustGenerator {
                     Self(Box::pin(f))
                 }
 
-                pub fn poll(&mut self, _post_cobject: isize, port: i64) -> Option<T> {
-                    #[cfg(target_family = "wasm")]
-                    let waker = waker_fn(move || {
-                        unsafe { __notifier_callback(port as _) };
-                    });
-                    #[cfg(not(target_family = "wasm"))]
-                    let waker = waker_fn(move || unsafe {
-                        let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
-                            core::mem::transmute(_post_cobject);
-                        let obj: i32 = 0;
-                        post_cobject(port, &obj as *const _ as *const _);
-                    });
+                pub fn poll(&mut self, post_cobject: isize, port: i64) -> Option<T> {
+                    let waker = ffi_waker(post_cobject, port);
                     let mut ctx = Context::from_waker(&waker);
                     match Pin::new(&mut self.0).poll(&mut ctx) {
                         Poll::Ready(res) => Some(res),
@@ -162,22 +163,18 @@ impl RustGenerator {
                     Self(Box::pin(f))
                 }
 
-                pub fn poll(&mut self, _post_cobject: isize, port: i64) -> Option<T> {
-                    #[cfg(target_family = "wasm")]
-                    let waker = waker_fn(move || {
-                        unsafe { __notifier_callback(port as _) };
-                    });
-                    #[cfg(not(target_family = "wasm"))]
-                    let waker = waker_fn(move || unsafe {
-                        let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
-                            core::mem::transmute(_post_cobject);
-                        let obj: i32 = 0;
-                        post_cobject(port, &obj as *const _ as *const _);
-                    });
+                pub fn poll(&mut self, post_cobject: isize, port: i64, done: i64) -> Option<T> {
+                    let waker = ffi_waker(post_cobject, port);
                     let mut ctx = Context::from_waker(&waker);
                     match Pin::new(&mut self.0).poll_next(&mut ctx) {
-                        Poll::Ready(Some(res)) => Some(res),
-                        Poll::Ready(None) => None,
+                        Poll::Ready(Some(res)) => {
+                            ffi_waker(post_cobject, port).wake();
+                            Some(res)
+                        }
+                        Poll::Ready(None) => {
+                            ffi_waker(post_cobject, done).wake();
+                            None
+                        }
                         Poll::Pending => None,
                     }
                 }

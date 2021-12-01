@@ -229,6 +229,11 @@ impl Abi {
                 import.push(Instr::BindArg("boxed".to_string(), arg.clone()));
                 self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
             }
+            FunctionType::PollStream(_, _) => {
+                let arg = gen.gen_num(self.iptr());
+                import.push(Instr::BindArg("boxed".to_string(), arg.clone()));
+                self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
+            }
             _ => {}
         }
         for (name, ty) in func.args.iter() {
