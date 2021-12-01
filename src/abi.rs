@@ -31,6 +31,7 @@ pub enum AbiType {
     Object(String),
     Option(Box<AbiType>),
     Result(Box<AbiType>),
+    RefFuture(Box<AbiType>),
     Future(Box<AbiType>),
     Stream(Box<AbiType>),
 }
@@ -50,6 +51,7 @@ pub enum FunctionType {
     Constructor(String),
     Method(String),
     Function,
+    PollFuture(String, AbiType),
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +60,26 @@ pub struct AbiFunction {
     pub name: String,
     pub args: Vec<(String, AbiType)>,
     pub ret: Option<AbiType>,
+}
+
+impl AbiFunction {
+    pub fn symbol(&self) -> String {
+        match &self.ty {
+            FunctionType::Constructor(object) | FunctionType::Method(object) => {
+                format!("__{}_{}", object, &self.name)
+            }
+            FunctionType::Function => format!("__{}", &self.name),
+            FunctionType::PollFuture(symbol, _) => format!("{}_future_{}", symbol, &self.name),
+        }
+    }
+
+    pub fn ret(&self, rets: Vec<Var>) -> Return {
+        match rets.len() {
+            0 => Return::Void,
+            1 => Return::Num(rets[0].clone()),
+            _ => Return::Struct(rets, format!("{}Return", self.symbol())),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -71,6 +93,26 @@ pub struct AbiObject {
 pub struct AbiStruct {
     pub name: String,
     pub fields: Vec<(String, AbiType)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AbiFuture {
+    pub ty: AbiType,
+    pub symbol: String,
+}
+
+impl AbiFuture {
+    pub fn poll(&self) -> AbiFunction {
+        AbiFunction {
+            ty: FunctionType::PollFuture(self.symbol.clone(), self.ty.clone()),
+            name: "poll".to_string(),
+            args: vec![
+                ("post_cobject".to_string(), AbiType::Isize),
+                ("port".to_string(), AbiType::Num(NumType::I64)),
+            ],
+            ret: Some(AbiType::Option(Box::new(self.ty.clone()))),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -210,6 +252,34 @@ impl Interface {
         funcs
     }
 
+    pub fn futures(&self) -> Vec<AbiFuture> {
+        let mut futures = vec![];
+        let mut functions = self.functions();
+        for obj in self.objects() {
+            functions.extend(obj.methods);
+        }
+        for func in functions {
+            if let Some(ty) = func.ret.as_ref() {
+                let mut p = ty;
+                loop {
+                    match p {
+                        AbiType::Option(ty) | AbiType::Result(ty) => p = &**ty,
+                        AbiType::Future(ty) => {
+                            let symbol = func.symbol();
+                            futures.push(AbiFuture {
+                                ty: (&**ty).clone(),
+                                symbol,
+                            });
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+        }
+        futures
+    }
+
     pub fn exports(&self, abi: &Abi) -> Vec<export::Export> {
         let mut exports = vec![];
         for function in self.functions() {
@@ -232,6 +302,9 @@ impl Interface {
             for method in &obj.methods {
                 imports.push(abi.import(method));
             }
+        }
+        for fut in self.futures() {
+            imports.push(abi.import(&fut.poll()));
         }
         imports
     }

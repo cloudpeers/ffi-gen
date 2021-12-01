@@ -1,5 +1,7 @@
 use crate::export::Instr;
-use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
+use crate::{
+    Abi, AbiFunction, AbiFuture, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var,
+};
 use genco::prelude::*;
 
 pub struct RustGenerator {
@@ -13,6 +15,12 @@ impl RustGenerator {
 
     pub fn generate(&self, iface: Interface) -> rust::Tokens {
         quote! {
+            use core::future::Future;
+            use core::mem::ManuallyDrop;
+            use core::pin::Pin;
+            use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+            use std::sync::Arc;
+
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
             pub fn panic_abort<R>(func: impl FnOnce() -> R + std::panic::UnwindSafe) -> R {
@@ -22,6 +30,11 @@ impl RustGenerator {
                         std::process::abort();
                     }
                 }
+            }
+
+            #[inline(always)]
+            pub fn assert_send_static<T: Send + 'static>(t: T) -> T {
+                t
             }
 
             #[no_mangle]
@@ -40,11 +53,82 @@ impl RustGenerator {
                 std::alloc::dealloc(ptr, layout);
             }
 
+            /// Converts a closure into a [`Waker`].
+            ///
+            /// The closure gets called every time the waker is woken.
+            pub fn waker_fn<F: Fn() + Send + Sync + 'static>(f: F) -> Waker {
+                let raw = Arc::into_raw(Arc::new(f)) as *const ();
+                let vtable = &Helper::<F>::VTABLE;
+                unsafe { Waker::from_raw(RawWaker::new(raw, vtable)) }
+            }
+
+            struct Helper<F>(F);
+
+            impl<F: Fn() + Send + Sync + 'static> Helper<F> {
+                const VTABLE: RawWakerVTable = RawWakerVTable::new(
+                    Self::clone_waker,
+                    Self::wake,
+                    Self::wake_by_ref,
+                    Self::drop_waker,
+                );
+
+                unsafe fn clone_waker(ptr: *const ()) -> RawWaker {
+                    let arc = ManuallyDrop::new(Arc::from_raw(ptr as *const F));
+                    core::mem::forget(arc.clone());
+                    RawWaker::new(ptr, &Self::VTABLE)
+                }
+
+                unsafe fn wake(ptr: *const ()) {
+                    let arc = Arc::from_raw(ptr as *const F);
+                    (arc)();
+                }
+
+                unsafe fn wake_by_ref(ptr: *const ()) {
+                    let arc = ManuallyDrop::new(Arc::from_raw(ptr as *const F));
+                    (arc)();
+                }
+
+                unsafe fn drop_waker(ptr: *const ()) {
+                    drop(Arc::from_raw(ptr as *const F));
+                }
+            }
+
+            #[cfg(target_family = "wasm")]
+            extern "C" {
+                fn __notifier_callback(idx: i32);
+            }
+
+            #[repr(transparent)]
+            pub struct FfiFuture<T: Send + 'static>(Pin<Box<dyn Future<Output = T> + Send + 'static>>);
+
+            impl<T: Send + 'static> FfiFuture<T> {
+                pub fn new(f: impl Future<Output = T> + Send + 'static) -> Self {
+                    Self(Box::pin(f))
+                }
+
+                pub fn poll(&mut self, _post_cobject: isize, port: i64) -> Option<T> {
+                    #[cfg(target_family = "wasm")]
+                    let waker = waker_fn(move || {
+                        unsafe { __notifier_callback(port as _) };
+                    });
+                    #[cfg(not(target_family = "wasm"))]
+                    let waker = waker_fn(move || unsafe {
+                        let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
+                            core::mem::transmute(_post_cobject);
+                        let obj: i32 = 0;
+                        post_cobject(port, &obj as *const _ as *const _);
+                    });
+                    let mut ctx = Context::from_waker(&waker);
+                    match Pin::new(&mut self.0).poll(&mut ctx) {
+                        Poll::Ready(res) => Some(res),
+                        Poll::Pending => None,
+                    }
+                }
+            }
+
             #(for func in iface.functions() => #(self.generate_function(&func)))
-            #(for func in iface.functions() => #(self.generate_return_struct(&func)))
-            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_function(&method))))
-            #(for obj in iface.objects() => #(for method in obj.methods => #(self.generate_return_struct(&method))))
-            #(for obj in iface.objects() => #(self.generate_destructor(&obj)))
+            #(for obj in iface.objects() => #(self.generate_object(&obj)))
+            #(for fut in iface.futures() => #(self.generate_future(&fut)))
         }
     }
 
@@ -65,6 +149,11 @@ impl RustGenerator {
                 }
             },
         };
+        let return_struct = if let Return::Struct(_, _) = &ffi.ret {
+            self.generate_return_struct(func)
+        } else {
+            quote!()
+        };
         quote! {
             #[no_mangle]
             pub extern "C" fn #(&ffi.symbol)(#args) #ret {
@@ -73,20 +162,38 @@ impl RustGenerator {
                     #return_
                 })
             }
+            #return_struct
         }
     }
 
-    fn generate_destructor(&self, obj: &AbiObject) -> rust::Tokens {
+    fn generate_object(&self, obj: &AbiObject) -> rust::Tokens {
+        let destructor_name = format!("drop_box_{}", &obj.name);
+        let destructor_type = quote!(#(&obj.name));
+        quote! {
+            #(for method in &obj.methods => #(self.generate_function(method)))
+            #(self.generate_destructor(&destructor_name, destructor_type))
+        }
+    }
+
+    fn generate_destructor(&self, name: &str, ty: rust::Tokens) -> rust::Tokens {
         // make destructor compatible with dart by adding an unused `isolate_callback_data` as
         // the first argument.
-        let name = format!("drop_box_{}", &obj.name);
         quote! {
             #[no_mangle]
             pub extern "C" fn #name(_: #(self.num_type(self.abi.iptr())), boxed: #(self.num_type(self.abi.iptr()))) {
                 panic_abort(move || {
-                    unsafe { Box::<#(&obj.name)>::from_raw(boxed as *mut _) };
+                    unsafe { Box::<#ty>::from_raw(boxed as *mut _) };
                 });
             }
+        }
+    }
+
+    fn generate_future(&self, fut: &AbiFuture) -> rust::Tokens {
+        let destructor_name = format!("{}_future_drop", &fut.symbol);
+        let destructor_type = quote!(FfiFuture<#(self.ty(&fut.ty))>);
+        quote! {
+            #(self.generate_function(&fut.poll()))
+            #(self.generate_destructor(&destructor_name, destructor_type))
         }
     }
 
@@ -136,7 +243,7 @@ impl RustGenerator {
             },
             Instr::LowerString(in_, ptr, len, cap) | Instr::LowerVec(in_, ptr, len, cap, _) => {
                 quote! {
-                    let #(self.var(in_))_0 = std::mem::ManuallyDrop::new(#(self.var(in_)));
+                    let #(self.var(in_))_0 = ManuallyDrop::new(#(self.var(in_)));
                     #(self.var(ptr)) = #(self.var(in_))_0.as_ptr() as _;
                     #(self.var(len)) = #(self.var(in_))_0.len() as _;
                     #(self.var(cap)) = #(self.var(in_))_0.capacity() as _;
@@ -169,26 +276,34 @@ impl RustGenerator {
                 let #(self.var(out)): Box<#object> = unsafe { Box::from_raw(#(self.var(in_))) };
             },
             Instr::LowerObject(in_, out) => quote! {
-                #(self.var(out)) = Box::into_raw(#(self.var(in_))) as _;
+                let #(self.var(in_))_0 = assert_send_static(#(self.var(in_)));
+                #(self.var(out)) = Box::into_raw(Box::new(#(self.var(in_))_0)) as _;
             },
+            Instr::LiftRefFuture(in_, out, ty) => quote! {
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiFuture<#(self.ty(ty))>) };
+            },
+            Instr::LowerFuture(in_, out) => quote! {
+                #(self.var(out)) = Box::into_raw(Box::new(FfiFuture::new(#(self.var(in_))))) as _;
+            },
+            Instr::LowerStream(_in_, _out) => todo!(),
             Instr::LowerOption(in_, var, some, some_instr) => quote! {
-                #(self.var(var)) = if let Some(#(self.var(some))) = #(self.var(in_)) {
+                if let Some(#(self.var(some))) = #(self.var(in_)) {
+                    #(self.var(var)) = 1;
                     #(for instr in some_instr => #(self.instr(instr)))
-                    1
                 } else {
-                    0
-                };
+                    #(self.var(var)) = 0;
+                }
             },
             Instr::LowerResult(in_, var, ok, ok_instr, err, err_instr) => quote! {
-                #(self.var(var)) = match #(self.var(in_)) {
+                match #(self.var(in_)) {
                     Ok(#(self.var(ok))) => {
+                        #(self.var(var)) = 1;
                         #(for instr in ok_instr => #(self.instr(instr)))
-                        1
                     }
                     Err(#(self.var(err))_0) => {
+                        #(self.var(var)) = 0;
                         let #(self.var(err)) = #(self.var(err))_0.to_string();
                         #(for instr in err_instr => #(self.instr(instr)))
-                        0
                     }
                 };
             },
@@ -197,14 +312,14 @@ impl RustGenerator {
                     FunctionType::Constructor(object) => {
                         quote!(#object::#name)
                     }
-                    FunctionType::Method(_) => {
+                    FunctionType::Method(_) | FunctionType::PollFuture(_, _) => {
                         quote!(#(self.var(self_.as_ref().unwrap())).#name)
                     }
                     FunctionType::Function => {
                         quote!(#name)
                     }
                 };
-                let args = quote!(#(for arg in args => #(self.var(arg))));
+                let args = quote!(#(for arg in args => #(self.var(arg)),));
                 if let Some(ret) = ret {
                     quote!(let #(self.var(ret)) = #invoke(#args);)
                 } else {
@@ -224,7 +339,20 @@ impl RustGenerator {
     fn ty(&self, ty: &AbiType) -> rust::Tokens {
         match ty {
             AbiType::Num(num) => self.num_type(*num),
-            _ => unreachable!(),
+            AbiType::Isize => quote!(isize),
+            AbiType::Usize => quote!(usize),
+            AbiType::Bool => quote!(bool),
+            AbiType::RefStr => quote!(&str),
+            AbiType::String => quote!(String),
+            AbiType::RefSlice(ty) => quote!(&[#(self.num_type(*ty))]),
+            AbiType::Vec(ty) => quote!(Vec<#(self.num_type(*ty))>),
+            AbiType::Option(ty) => quote!(Option<#(self.ty(ty))>),
+            AbiType::Result(ty) => quote!(anyhow::Result<#(self.ty(ty))>),
+            AbiType::RefObject(_)
+            | AbiType::Object(_)
+            | AbiType::RefFuture(_)
+            | AbiType::Future(_)
+            | AbiType::Stream(_) => unimplemented!(),
         }
     }
 

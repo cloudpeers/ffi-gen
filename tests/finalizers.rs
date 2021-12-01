@@ -19,8 +19,8 @@ compile_pass! {
             }
         }
 
-        pub fn make_box() -> Box<CustomType> {
-            Box::new(CustomType)
+        pub fn make_box() -> CustomType {
+            CustomType
         }
 
         pub fn was_dropped() -> bool {

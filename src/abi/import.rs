@@ -85,6 +85,7 @@ impl Abi {
                 import.push(Instr::MoveObject(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
+            AbiType::RefFuture(_ty) => todo!(),
             AbiType::Future(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 import.push(Instr::MoveFuture(arg.clone(), ptr.clone()));
@@ -102,6 +103,7 @@ impl Abi {
 
     fn import_return(
         self,
+        symbol: &str,
         ty: &AbiType,
         out: Var,
         gen: &mut VarGen,
@@ -175,7 +177,7 @@ impl Abi {
                 let var = gen.gen_num(NumType::U8);
                 rets.push(var.clone());
                 import.push(Instr::HandleNull(var));
-                self.import_return(&**ty, out, gen, rets, import);
+                self.import_return(symbol, &**ty, out, gen, rets, import);
             }
             AbiType::Result(ty) => {
                 let var = gen.gen_num(NumType::U8);
@@ -187,29 +189,39 @@ impl Abi {
                 rets.push(len.clone());
                 rets.push(cap.clone());
                 import.push(Instr::HandleError(var, ptr, len, cap));
-                self.import_return(&**ty, out, gen, rets, import);
+                self.import_return(symbol, &**ty, out, gen, rets, import);
             }
-            AbiType::Future(_ty) => todo!(),
+            AbiType::RefFuture(_ty) => todo!(),
+            AbiType::Future(_ty) => {
+                let ptr = gen.gen_num(self.iptr());
+                rets.push(ptr.clone());
+                let poll = format!("{}_future_poll", symbol);
+                let destructor = format!("{}_future_drop", symbol);
+                import.push(Instr::LiftFuture(ptr, poll, destructor, out));
+            }
             AbiType::Stream(_ty) => todo!(),
         }
     }
 
     pub fn import(self, func: &AbiFunction) -> Import {
-        let symbol = match &func.ty {
-            FunctionType::Constructor(obj) | FunctionType::Method(obj) => {
-                format!("__{}_{}", obj, &func.name)
-            }
-            FunctionType::Function => format!("__{}", &func.name),
-        };
+        let symbol = func.symbol();
         let mut gen = VarGen::new();
         let mut args = vec![];
         let mut rets = vec![];
         let mut import = vec![];
         let mut import_cleanup = vec![];
-        if let FunctionType::Method(_) = &func.ty {
-            let self_ = gen.gen_num(self.iptr());
-            import.push(Instr::BorrowSelf(self_.clone()));
-            args.push(self_);
+        match &func.ty {
+            FunctionType::Method(_) => {
+                let self_ = gen.gen_num(self.iptr());
+                import.push(Instr::BorrowSelf(self_.clone()));
+                args.push(self_);
+            }
+            FunctionType::PollFuture(_, _) => {
+                let arg = gen.gen_num(self.iptr());
+                import.push(Instr::BindArg("boxed".to_string(), arg.clone()));
+                self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
+            }
+            _ => {}
         }
         for (name, ty) in func.args.iter() {
             let arg = gen.gen(ty.clone());
@@ -221,7 +233,14 @@ impl Abi {
         if let Some(ret) = ret {
             let out = gen.gen(ret.ty.clone());
             let mut instr = vec![];
-            self.import_return(&ret.ty, out.clone(), &mut gen, &mut rets, &mut instr);
+            self.import_return(
+                &symbol,
+                &ret.ty,
+                out.clone(),
+                &mut gen,
+                &mut rets,
+                &mut instr,
+            );
             import.push(Instr::BindRets(ret.clone(), rets.clone()));
             import.extend(instr);
             import.extend(import_cleanup);
@@ -230,16 +249,11 @@ impl Abi {
             import.extend(import_cleanup);
             import.push(Instr::ReturnVoid);
         }
-        let ret = match rets.len() {
-            0 => Return::Void,
-            1 => Return::Num(rets[0].clone()),
-            _ => Return::Struct(rets, format!("{}Return", symbol)),
-        };
         Import {
             symbol,
             args,
             instr: import,
-            ret,
+            ret: func.ret(rets),
         }
     }
 }
@@ -271,4 +285,5 @@ pub enum Instr {
     HandleNull(Var),
     HandleError(Var, Var, Var, Var),
     BindRets(Var, Vec<Var>),
+    LiftFuture(Var, String, String, Var),
 }

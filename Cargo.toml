@@ -22,3 +22,4 @@ trybuild = { version = "1.0.52", optional = true }
 
 [dev-dependencies]
 ffi-gen = { path = ".", features = ["test_runner"] }
+futures = "0.3.18"
