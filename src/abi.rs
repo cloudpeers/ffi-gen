@@ -132,6 +132,7 @@ impl AbiStream {
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),
                 ("port".to_string(), AbiType::Num(NumType::I64)),
+                ("done".to_string(), AbiType::Num(NumType::I64)),
             ],
             ret: Some(AbiType::Option(Box::new(self.ty.clone()))),
         }

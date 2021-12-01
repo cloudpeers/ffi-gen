@@ -212,15 +212,21 @@ compile_pass! {
     ),
     (
         final stream = api.create([42, 99]);
-        assert(await stream == 42);
-        assert(await stream == 99);
-        assert(await stream == null);
+        var counter = 0;
+        await for (final value in stream) {
+            assert(counter == 0 && value == 42 || counter == 1 && value == 99);
+            counter += 1;
+        }
+        assert(counter == 2);
     ),
     (
         const stream = api.create([42, 99]);
-        assert.equal(await stream, 42);
-        assert.equal(await stream, 99);
-        assert.equal(await stream, null);
+        let counter = 0;
+        for await (const value of stream) {
+            assert.equal(counter == 0 && value == 42 || counter == 1 && value == 99);
+            counter += 1;
+        }
+        assert(counter == 2);
     ),
     ( )
 }
