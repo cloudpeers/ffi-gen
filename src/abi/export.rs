@@ -79,6 +79,11 @@ impl Abi {
             }
             AbiType::Option(_) => todo!(),
             AbiType::Result(_) => todo!(),
+            AbiType::RefFuture(ty) => {
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefFuture(ptr, out, (&**ty).clone()));
+            }
             AbiType::Future(_) => todo!(),
             AbiType::Stream(_) => todo!(),
         }
@@ -169,8 +174,17 @@ impl Abi {
                 self.export_return(ok.clone(), gen, &mut ok_instr, rets);
                 exports.push(Instr::LowerResult(ret, var, ok, ok_instr, err, err_instr));
             }
-            AbiType::Future(_) => todo!(),
-            AbiType::Stream(_) => todo!(),
+            AbiType::RefFuture(_ty) => todo!(),
+            AbiType::Future(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                rets.push(ptr.clone());
+                exports.push(Instr::LowerFuture(ret, ptr));
+            }
+            AbiType::Stream(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                rets.push(ptr.clone());
+                exports.push(Instr::LowerStream(ret, ptr));
+            }
         }
     }
 
@@ -180,20 +194,22 @@ impl Abi {
         let mut args = vec![];
         let mut rets = vec![];
         let mut exports = vec![];
-        let symbol = match &func.ty {
-            FunctionType::Constructor(object) | FunctionType::Method(object) => {
-                format!("__{}_{}", object, &func.name)
+        let self_ = match &func.ty {
+            FunctionType::Method(object) => {
+                let out = gen.gen(AbiType::RefObject(object.clone()));
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefObject(ptr, out.clone(), object.clone()));
+                Some(out)
             }
-            FunctionType::Function => format!("__{}", &func.name),
-        };
-        let self_ = if let FunctionType::Method(object) = &func.ty {
-            let out = gen.gen(AbiType::RefObject(object.clone()));
-            let ptr = gen.gen_num(self.iptr());
-            def.push(ptr.clone());
-            exports.push(Instr::LiftRefObject(ptr, out.clone(), object.clone()));
-            Some(out)
-        } else {
-            None
+            FunctionType::PollFuture(_, ty) => {
+                let out = gen.gen(AbiType::RefFuture(Box::new(ty.clone())));
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefFuture(ptr, out.clone(), ty.clone()));
+                Some(out)
+            }
+            _ => None,
         };
         for (_, ty) in func.args.iter() {
             self.export_arg(ty, &mut gen, &mut exports, &mut def, &mut args);
@@ -214,16 +230,11 @@ impl Abi {
             }
             exports.extend(instr);
         }
-        let ret = match rets.len() {
-            0 => Return::Void,
-            1 => Return::Num(rets[0].clone()),
-            _ => Return::Struct(rets, format!("{}Return", symbol)),
-        };
         Export {
-            symbol,
+            symbol: func.symbol(),
             instr: exports,
             args: def,
-            ret,
+            ret: func.ret(rets),
         }
     }
 }
@@ -252,6 +263,9 @@ pub enum Instr {
     LowerObject(Var, Var),
     LowerOption(Var, Var, Var, Vec<Instr>),
     LowerResult(Var, Var, Var, Vec<Instr>, Var, Vec<Instr>),
+    LowerFuture(Var, Var),
+    LiftRefFuture(Var, Var, AbiType),
+    LowerStream(Var, Var),
     CallAbi(FunctionType, Option<Var>, String, Option<Var>, Vec<Var>),
     DefineRets(Vec<Var>),
 }

@@ -71,6 +71,7 @@ impl TsGenerator {
                 AbiType::RefObject(i) | AbiType::Object(i) => quote!(#(i)),
                 AbiType::Option(_) => todo!(),
                 AbiType::Result(_) => todo!(),
+                AbiType::RefFuture(_) => todo!(),
                 AbiType::Future(_) => todo!(),
                 AbiType::Stream(_) => todo!(),
             }
@@ -117,6 +118,9 @@ impl JsGenerator {
             // gets the wasm at a url and instantiates it.
             // checks if streaming instantiation is available and uses that
             function fetchAndInstantiate(url, imports) {
+                const env = imports.env || {};
+                env.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
+                imports.env = env;
                 return fetchFn(url)
                     .then((resp) => {
                         if (!resp.ok) {
@@ -179,6 +183,42 @@ impl JsGenerator {
                 }
             }
 
+            class NotifierRegistry {
+                constructor() {
+                    this.counter = 0;
+                    this.callbacks = {};
+                }
+
+                registerNotifier(notifier) {
+                    const idx = this.counter;
+                    this.counter += 1;
+                    this.callbacks[idx] = notifier(idx);
+                    return idx;
+                }
+
+                unregisterNotifier(idx) {
+                    delete this.callbacks[idx];
+                }
+            }
+
+            const notifierRegistry = new NotifierRegistry();
+
+            const nativeFuture = (box, nativePoll) => {
+                const poll = (resolve, idx) => {
+                    const ret = nativePoll(box.borrow(), 0, BigInt(idx));
+                    if (ret != null) {
+                        notifierRegistry.unregisterNotifier(idx);
+                        resolve(ret);
+                        box.drop();
+                    }
+                };
+                return new Promise((resolve, _) => {
+                    const notifier = (idx) => () => poll(resolve, idx);
+                    const idx = notifierRegistry.registerNotifier(notifier);
+                    poll(resolve, idx);
+                });
+            };
+
             class Api {
                 async fetch(url, imports) {
                     this.instance = await fetchAndInstantiate(url, imports);
@@ -197,6 +237,7 @@ impl JsGenerator {
                 }
 
                 #(for func in iface.functions() => #(self.generate_function(&func)))
+                #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -230,7 +271,17 @@ impl JsGenerator {
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this.api),
-            FunctionType::Function => quote!(this),
+            FunctionType::Function | FunctionType::PollFuture(_, _) => quote!(this),
+        };
+        let boxed = if let FunctionType::PollFuture(_, _) = &func.ty {
+            quote!(boxed,)
+        } else {
+            quote!()
+        };
+        let name = if let FunctionType::PollFuture(_, _) = &func.ty {
+            &ffi.symbol
+        } else {
+            &func.name
         };
         let args = quote!(#(for (name, _) in &func.args => #name,));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
@@ -241,7 +292,7 @@ impl JsGenerator {
                 }
             },
             _ => quote! {
-                #(&func.name)(#args) {
+                #name(#(boxed)#args) {
                     #body
                 }
             },
@@ -307,7 +358,6 @@ impl JsGenerator {
                 const #(self.var(out))_1 = new TextDecoder();
                 const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
-
             Instr::LowerVec(in_, ptr, len, ty) => quote! {
                 const #(self.var(in_))_0 =
                     new #(self.generate_array(*ty))(
@@ -347,6 +397,13 @@ impl JsGenerator {
                     }
                     throw #(self.var(var))_2;
                 }
+            },
+            Instr::LiftFuture(box_, poll, drop, out) => quote! {
+                const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
+                const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
+                const #(self.var(out)) = nativeFuture(#(self.var(box_))_1, (a, b, c) => {
+                    return #api.#poll(a, b, c);
+                });
             },
         }
     }
@@ -425,6 +482,11 @@ impl WasmMultiValueShim {
                 funcs.push(func)
             }
         }
+        for fut in iface.futures() {
+            if let Some(func) = self.generate_return(&fut.poll()) {
+                funcs.push(func);
+            }
+        }
         funcs
     }
 
@@ -472,10 +534,15 @@ pub mod test_runner {
 
             extern "C" {
                 fn __panic(ptr: isize, len: usize);
+                fn __log(ptr: isize, len: usize);
             }
 
             pub fn panic(msg: &str) {
                 unsafe { __panic(msg.as_ptr() as _, msg.len()) };
+            }
+
+            pub fn log(msg: &str) {
+                unsafe { __log(msg.as_ptr() as _, msg.len()) };
             }
         };
 
@@ -492,7 +559,12 @@ pub mod test_runner {
                             const buf = new Uint8Array(api.instance.exports.memory.buffer, ptr, len);
                             const decoder = new TextDecoder();
                             throw decoder.decode(buf);
-                        }
+                        },
+                        __log: (ptr, len) => {
+                            const buf = new Uint8Array(api.instance.exports.memory.buffer, ptr, len);
+                            const decoder = new TextDecoder();
+                            console.log(decoder.decode(buf));
+                        },
                     }
                 });
                 #js
@@ -512,6 +584,8 @@ pub mod test_runner {
             fn main() {
                 use std::process::Command;
                 let ret = Command::new("rustc")
+                    .arg("--edition")
+                    .arg("2021")
                     .arg("--crate-name")
                     .arg("compile_pass")
                     .arg("--crate-type")

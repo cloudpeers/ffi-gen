@@ -18,6 +18,9 @@ function fetch_polyfill(file) {
 const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
 function fetchAndInstantiate(url, imports) {
+  const env = imports.env || {};
+  env.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
+  imports.env = env;
   return fetchFn(url)
     .then((resp) => {
       if (!resp.ok) {
@@ -81,6 +84,42 @@ class Box {
     this.destructor();
   }
 }
+
+class NotifierRegistry {
+  constructor() {
+    this.counter = 0;
+    this.callbacks = {};
+  }
+
+  registerNotifier(notifier) {
+    const idx = this.counter;
+    this.counter += 1;
+    this.callbacks[idx] = notifier(idx);
+    return idx;
+  }
+
+  unregisterNotifier(idx) {
+    delete this.callbacks[idx];
+  }
+}
+
+const notifierRegistry = new NotifierRegistry();
+
+const nativeFuture = (box, nativePoll) => {
+  const poll = (resolve, idx) => {
+    const ret = nativePoll(box.borrow(), 0, BigInt(idx));
+    if (ret != null) {
+      notifierRegistry.unregisterNotifier(idx);
+      resolve(ret);
+      box.drop();
+    }
+  };
+  return new Promise((resolve, _) => {
+    const notifier = (idx) => () => poll(resolve, idx);
+    const idx = notifierRegistry.registerNotifier(notifier);
+    poll(resolve, idx);
+  });
+};
 
 class Api {
   async fetch(url, imports) {
