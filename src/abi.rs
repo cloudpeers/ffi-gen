@@ -33,6 +33,7 @@ pub enum AbiType {
     Result(Box<AbiType>),
     RefFuture(Box<AbiType>),
     Future(Box<AbiType>),
+    RefStream(Box<AbiType>),
     Stream(Box<AbiType>),
 }
 
@@ -52,6 +53,7 @@ pub enum FunctionType {
     Method(String),
     Function,
     PollFuture(String, AbiType),
+    PollStream(String, AbiType),
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +72,7 @@ impl AbiFunction {
             }
             FunctionType::Function => format!("__{}", &self.name),
             FunctionType::PollFuture(symbol, _) => format!("{}_future_{}", symbol, &self.name),
+            FunctionType::PollStream(symbol, _) => format!("{}_stream_{}", symbol, &self.name),
         }
     }
 
@@ -105,6 +108,26 @@ impl AbiFuture {
     pub fn poll(&self) -> AbiFunction {
         AbiFunction {
             ty: FunctionType::PollFuture(self.symbol.clone(), self.ty.clone()),
+            name: "poll".to_string(),
+            args: vec![
+                ("post_cobject".to_string(), AbiType::Isize),
+                ("port".to_string(), AbiType::Num(NumType::I64)),
+            ],
+            ret: Some(AbiType::Option(Box::new(self.ty.clone()))),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AbiStream {
+    pub ty: AbiType,
+    pub symbol: String,
+}
+
+impl AbiStream {
+    pub fn poll(&self) -> AbiFunction {
+        AbiFunction {
+            ty: FunctionType::PollStream(self.symbol.clone(), self.ty.clone()),
             name: "poll".to_string(),
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),
@@ -280,6 +303,34 @@ impl Interface {
         futures
     }
 
+    pub fn streams(&self) -> Vec<AbiStream> {
+        let mut streams = vec![];
+        let mut functions = self.functions();
+        for obj in self.objects() {
+            functions.extend(obj.methods);
+        }
+        for func in functions {
+            if let Some(ty) = func.ret.as_ref() {
+                let mut p = ty;
+                loop {
+                    match p {
+                        AbiType::Option(ty) | AbiType::Result(ty) => p = &**ty,
+                        AbiType::Stream(ty) => {
+                            let symbol = func.symbol();
+                            streams.push(AbiStream {
+                                ty: (&**ty).clone(),
+                                symbol,
+                            });
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+        }
+        streams
+    }
+
     pub fn exports(&self, abi: &Abi) -> Vec<export::Export> {
         let mut exports = vec![];
         for function in self.functions() {
@@ -305,6 +356,9 @@ impl Interface {
         }
         for fut in self.futures() {
             imports.push(abi.import(&fut.poll()));
+        }
+        for stream in self.streams() {
+            imports.push(abi.import(&stream.poll()));
         }
         imports
     }

@@ -1,6 +1,7 @@
 use crate::export::Instr;
 use crate::{
-    Abi, AbiFunction, AbiFuture, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var,
+    Abi, AbiFunction, AbiFuture, AbiObject, AbiStream, AbiType, FunctionType, Interface, NumType,
+    Return, Var,
 };
 use genco::prelude::*;
 
@@ -126,9 +127,66 @@ impl RustGenerator {
                 }
             }
 
+            pub trait Stream {
+                type Item;
+
+                fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>>;
+            }
+
+            impl<T> Stream for Pin<T>
+            where
+                T: core::ops::DerefMut + Unpin,
+                T::Target: Stream,
+            {
+                type Item = <T::Target as Stream>::Item;
+
+                fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+                    self.get_mut().as_mut().poll_next(cx)
+                }
+            }
+
+            #[cfg(feature = "futures")]
+            impl<T: futures::Stream> Stream for T {
+                type Item = T::Item;
+
+                fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+                    futures::Stream::poll_next(self, cx)
+                }
+            }
+
+            #[repr(transparent)]
+            pub struct FfiStream<T: Send + 'static>(Pin<Box<dyn Stream<Item = T> + Send + 'static>>);
+
+            impl<T: Send + 'static> FfiStream<T> {
+                pub fn new(f: impl Stream<Item = T> + Send + 'static) -> Self {
+                    Self(Box::pin(f))
+                }
+
+                pub fn poll(&mut self, _post_cobject: isize, port: i64) -> Option<T> {
+                    #[cfg(target_family = "wasm")]
+                    let waker = waker_fn(move || {
+                        unsafe { __notifier_callback(port as _) };
+                    });
+                    #[cfg(not(target_family = "wasm"))]
+                    let waker = waker_fn(move || unsafe {
+                        let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
+                            core::mem::transmute(_post_cobject);
+                        let obj: i32 = 0;
+                        post_cobject(port, &obj as *const _ as *const _);
+                    });
+                    let mut ctx = Context::from_waker(&waker);
+                    match Pin::new(&mut self.0).poll_next(&mut ctx) {
+                        Poll::Ready(Some(res)) => Some(res),
+                        Poll::Ready(None) => None,
+                        Poll::Pending => None,
+                    }
+                }
+            }
+
             #(for func in iface.functions() => #(self.generate_function(&func)))
             #(for obj in iface.objects() => #(self.generate_object(&obj)))
             #(for fut in iface.futures() => #(self.generate_future(&fut)))
+            #(for fut in iface.streams() => #(self.generate_stream(&fut)))
         }
     }
 
@@ -193,6 +251,15 @@ impl RustGenerator {
         let destructor_type = quote!(FfiFuture<#(self.ty(&fut.ty))>);
         quote! {
             #(self.generate_function(&fut.poll()))
+            #(self.generate_destructor(&destructor_name, destructor_type))
+        }
+    }
+
+    fn generate_stream(&self, stream: &AbiStream) -> rust::Tokens {
+        let destructor_name = format!("{}_stream_drop", &stream.symbol);
+        let destructor_type = quote!(FfiStream<#(self.ty(&stream.ty))>);
+        quote! {
+            #(self.generate_function(&stream.poll()))
             #(self.generate_destructor(&destructor_name, destructor_type))
         }
     }
@@ -282,10 +349,15 @@ impl RustGenerator {
             Instr::LiftRefFuture(in_, out, ty) => quote! {
                 let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiFuture<#(self.ty(ty))>) };
             },
+            Instr::LiftRefStream(in_, out, ty) => quote! {
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiStream<#(self.ty(ty))>) };
+            },
             Instr::LowerFuture(in_, out) => quote! {
                 #(self.var(out)) = Box::into_raw(Box::new(FfiFuture::new(#(self.var(in_))))) as _;
             },
-            Instr::LowerStream(_in_, _out) => todo!(),
+            Instr::LowerStream(in_, out) => quote! {
+                #(self.var(out)) = Box::into_raw(Box::new(FfiStream::new(#(self.var(in_))))) as _;
+            },
             Instr::LowerOption(in_, var, some, some_instr) => quote! {
                 if let Some(#(self.var(some))) = #(self.var(in_)) {
                     #(self.var(var)) = 1;
@@ -312,7 +384,9 @@ impl RustGenerator {
                     FunctionType::Constructor(object) => {
                         quote!(#object::#name)
                     }
-                    FunctionType::Method(_) | FunctionType::PollFuture(_, _) => {
+                    FunctionType::Method(_)
+                    | FunctionType::PollFuture(_, _)
+                    | FunctionType::PollStream(_, _) => {
                         quote!(#(self.var(self_.as_ref().unwrap())).#name)
                     }
                     FunctionType::Function => {
@@ -352,6 +426,7 @@ impl RustGenerator {
             | AbiType::Object(_)
             | AbiType::RefFuture(_)
             | AbiType::Future(_)
+            | AbiType::RefStream(_)
             | AbiType::Stream(_) => unimplemented!(),
         }
     }

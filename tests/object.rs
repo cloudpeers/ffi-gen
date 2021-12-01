@@ -161,9 +161,9 @@ compile_pass! {
         }
     ),
     (
-        let _fut = __create();
-        let _f = __create_future_poll;
-        let _d = __create_future_drop;
+        let fut = __create();
+        let _poll = __create_future_poll;
+        __create_future_drop(0, fut);
     ),
     (
         final fut = api.create();
@@ -182,6 +182,45 @@ compile_pass! {
         clearInterval(i);
         console.log(res);
         assert.equal(res, 42);
+    ),
+    ( )
+}
+
+compile_pass! {
+    nodelay_stream,
+    "create fn(values: &[u32]) -> Stream<u32>;",
+    (
+        struct TestStream(Vec<u32>);
+
+        impl Stream for TestStream {
+            type Item = u32;
+
+            fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Option<Self::Item>> {
+                Poll::Ready(self.0.pop())
+            }
+        }
+
+        pub fn create(values: &[u32]) -> impl Stream<Item = u32> {
+            TestStream(values.into_iter().rev().copied().collect())
+        }
+    ),
+    (
+        let values = [42, 99];
+        let stream = __create(values.as_ptr() as _, values.len() as _);
+        let _poll = __create_stream_poll;
+        __create_stream_drop(0, stream);
+    ),
+    (
+        final stream = api.create([42, 99]);
+        assert(await stream == 42);
+        assert(await stream == 99);
+        assert(await stream == null);
+    ),
+    (
+        const stream = api.create([42, 99]);
+        assert.equal(await stream, 42);
+        assert.equal(await stream, 99);
+        assert.equal(await stream, null);
     ),
     ( )
 }
