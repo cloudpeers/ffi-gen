@@ -184,6 +184,7 @@ impl DartGenerator {
                     Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
+                #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
 
                 #(for func in iface.imports(&self.abi) => #(self.generate_wrapper(func)))
             }
@@ -216,17 +217,19 @@ impl DartGenerator {
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this._api),
-            FunctionType::Function | FunctionType::PollFuture(_, _) => quote!(this),
+            FunctionType::Function
+            | FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _) => quote!(this),
         };
-        let boxed = if let FunctionType::PollFuture(_, _) = &func.ty {
-            quote!(int boxed,)
-        } else {
-            quote!()
+        let boxed = match &func.ty {
+            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(int boxed,),
+            _ => quote!(),
         };
-        let name = if let FunctionType::PollFuture(_, _) = &func.ty {
-            format!("_{}", ffi.symbol)
-        } else {
-            func.name.clone()
+        let name = match &func.ty {
+            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => {
+                format!("_{}", ffi.symbol)
+            }
+            _ => func.name.clone(),
         };
         let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #name,));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
@@ -355,6 +358,12 @@ impl DartGenerator {
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
             },
+            Instr::LiftStream(box_, poll, drop, out) => quote! {
+                final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
+                final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
+                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
+            },
         }
     }
 
@@ -393,7 +402,8 @@ impl DartGenerator {
             AbiType::Result(ty) => self.generate_type(&**ty),
             AbiType::RefFuture(_) => todo!(),
             AbiType::Future(_) => quote!(Future),
-            AbiType::Stream(_) => todo!(),
+            AbiType::RefStream(_) => todo!(),
+            AbiType::Stream(_) => quote!(Stream),
         }
     }
 

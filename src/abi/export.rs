@@ -84,6 +84,11 @@ impl Abi {
                 def.push(ptr.clone());
                 exports.push(Instr::LiftRefFuture(ptr, out, (&**ty).clone()));
             }
+            AbiType::RefStream(ty) => {
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefStream(ptr, out, (&**ty).clone()));
+            }
             AbiType::Future(_) => todo!(),
             AbiType::Stream(_) => todo!(),
         }
@@ -180,6 +185,7 @@ impl Abi {
                 rets.push(ptr.clone());
                 exports.push(Instr::LowerFuture(ret, ptr));
             }
+            AbiType::RefStream(_ty) => todo!(),
             AbiType::Stream(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
@@ -207,6 +213,13 @@ impl Abi {
                 let ptr = gen.gen_num(self.iptr());
                 def.push(ptr.clone());
                 exports.push(Instr::LiftRefFuture(ptr, out.clone(), ty.clone()));
+                Some(out)
+            }
+            FunctionType::PollStream(_, ty) => {
+                let out = gen.gen(AbiType::RefStream(Box::new(ty.clone())));
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefStream(ptr, out.clone(), ty.clone()));
                 Some(out)
             }
             _ => None,
@@ -266,6 +279,7 @@ pub enum Instr {
     LowerFuture(Var, Var),
     LiftRefFuture(Var, Var, AbiType),
     LowerStream(Var, Var),
+    LiftRefStream(Var, Var, AbiType),
     CallAbi(FunctionType, Option<Var>, String, Option<Var>, Vec<Var>),
     DefineRets(Vec<Var>),
 }

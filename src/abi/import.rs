@@ -91,6 +91,7 @@ impl Abi {
                 import.push(Instr::MoveFuture(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
+            AbiType::RefStream(_ty) => todo!(),
             AbiType::Stream(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 import.push(Instr::MoveStream(arg.clone(), ptr.clone()));
@@ -199,7 +200,14 @@ impl Abi {
                 let destructor = format!("{}_future_drop", symbol);
                 import.push(Instr::LiftFuture(ptr, poll, destructor, out));
             }
-            AbiType::Stream(_ty) => todo!(),
+            AbiType::RefStream(_ty) => todo!(),
+            AbiType::Stream(_ty) => {
+                let ptr = gen.gen_num(self.iptr());
+                rets.push(ptr.clone());
+                let poll = format!("{}_stream_poll", symbol);
+                let destructor = format!("{}_stream_drop", symbol);
+                import.push(Instr::LiftStream(ptr, poll, destructor, out));
+            }
         }
     }
 
@@ -286,4 +294,5 @@ pub enum Instr {
     HandleError(Var, Var, Var, Var),
     BindRets(Var, Vec<Var>),
     LiftFuture(Var, String, String, Var),
+    LiftStream(Var, String, String, Var),
 }

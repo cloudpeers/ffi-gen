@@ -73,6 +73,7 @@ impl TsGenerator {
                 AbiType::Result(_) => todo!(),
                 AbiType::RefFuture(_) => todo!(),
                 AbiType::Future(_) => todo!(),
+                AbiType::RefStream(_) => todo!(),
                 AbiType::Stream(_) => todo!(),
             }
         } else {
@@ -238,6 +239,7 @@ impl JsGenerator {
 
                 #(for func in iface.functions() => #(self.generate_function(&func)))
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
+                #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -271,17 +273,17 @@ impl JsGenerator {
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this.api),
-            FunctionType::Function | FunctionType::PollFuture(_, _) => quote!(this),
+            FunctionType::Function
+            | FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _) => quote!(this),
         };
-        let boxed = if let FunctionType::PollFuture(_, _) = &func.ty {
-            quote!(boxed,)
-        } else {
-            quote!()
+        let boxed = match &func.ty {
+            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(boxed,),
+            _ => quote!(),
         };
-        let name = if let FunctionType::PollFuture(_, _) = &func.ty {
-            &ffi.symbol
-        } else {
-            &func.name
+        let name = match &func.ty {
+            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => &ffi.symbol,
+            _ => &func.name,
         };
         let args = quote!(#(for (name, _) in &func.args => #name,));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
@@ -405,6 +407,13 @@ impl JsGenerator {
                     return #api.#poll(a, b, c);
                 });
             },
+            Instr::LiftStream(box_, poll, drop, out) => quote! {
+                const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
+                const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
+                const #(self.var(out)) = nativeStream(#(self.var(box_))_1, (a, b, c) => {
+                    return #api.#poll(a, b, c);
+                });
+            },
         }
     }
 
@@ -469,44 +478,25 @@ impl WasmMultiValueShim {
     }
 
     fn generate_args(&self, iface: Interface) -> Vec<String> {
-        let mut funcs = vec![];
-        for obj in iface.objects() {
-            for func in &obj.methods {
-                if let Some(func) = self.generate_return(func) {
-                    funcs.push(func)
-                }
-            }
-        }
-        for func in iface.functions() {
-            if let Some(func) = self.generate_return(&func) {
-                funcs.push(func)
-            }
-        }
-        for fut in iface.futures() {
-            if let Some(func) = self.generate_return(&fut.poll()) {
-                funcs.push(func);
-            }
-        }
-        funcs
-    }
-
-    fn generate_return(&self, func: &AbiFunction) -> Option<String> {
-        let ffi = self.abi.export(func);
-        match &ffi.ret {
-            Return::Struct(fields, _) => {
-                let mut ret = String::new();
-                for field in fields {
-                    let (size, _) = self.abi.layout(field.ty.num());
-                    if size > 4 {
-                        ret.push_str("i64 ");
-                    } else {
-                        ret.push_str("i32 ");
+        iface
+            .imports(&self.abi)
+            .into_iter()
+            .filter_map(|import| match &import.ret {
+                Return::Struct(fields, _) => {
+                    let mut ret = String::new();
+                    for field in fields {
+                        let (size, _) = self.abi.layout(field.ty.num());
+                        if size > 4 {
+                            ret.push_str("i64 ");
+                        } else {
+                            ret.push_str("i32 ");
+                        }
                     }
+                    Some(format!("\"{} {}\"", import.symbol, ret))
                 }
-                Some(format!("\"{} {}\"", ffi.symbol, ret))
-            }
-            _ => None,
-        }
+                _ => None,
+            })
+            .collect()
     }
 }
 
