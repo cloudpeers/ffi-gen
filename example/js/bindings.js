@@ -15,6 +15,8 @@ function fetch_polyfill(file) {
   });
 }
 
+const { ReadableStream } = require("node:stream/web");
+
 const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
 function fetchAndInstantiate(url, imports) {
@@ -91,11 +93,14 @@ class NotifierRegistry {
     this.callbacks = {};
   }
 
-  registerNotifier(notifier) {
+  reserveSlot() {
     const idx = this.counter;
     this.counter += 1;
-    this.callbacks[idx] = notifier(idx);
     return idx;
+  }
+
+  registerNotifier(idx, notifier) {
+    this.callbacks[idx] = notifier;
   }
 
   unregisterNotifier(idx) {
@@ -115,9 +120,35 @@ const nativeFuture = (box, nativePoll) => {
     }
   };
   return new Promise((resolve, _) => {
-    const notifier = (idx) => () => poll(resolve, idx);
-    const idx = notifierRegistry.registerNotifier(notifier);
+    const idx = notifierRegistry.reserveSlot();
+    const notifier = () => poll(resolve, idx);
+    notifierRegistry.registerNotifier(idx, notifier);
     poll(resolve, idx);
+  });
+};
+
+const nativeStream = (box, nativePoll) => {
+  const poll = (next, nextIdx, doneIdx) => {
+    const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));
+    if (ret != null) {
+      next(ret);
+    }
+  };
+  return new ReadableStream({
+    start(controller) {
+      const nextIdx = notifierRegistry.reserveSlot();
+      const doneIdx = notifierRegistry.reserveSlot();
+      const nextNotifier = () => poll(controller.enqueue, nextIdx, doneIdx);
+      const doneNotifier = () => {
+        notifierRegistry.unregisterNotifier(nextIdx);
+        notifierRegistry.unregisterNotifier(doneIdx);
+        controller.close();
+        box.drop();
+      };
+      notifierRegistry.registerNotifier(nextIdx, nextNotifier);
+      notifierRegistry.registerNotifier(doneIdx, doneNotifier);
+      poll(controller.enqueue, nextIdx, doneIdx);
+    },
   });
 };
 
