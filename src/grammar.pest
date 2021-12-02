@@ -1,9 +1,5 @@
 ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
-arg = { ident ~ ":" ~ type_ }
-args = { (arg ~ ("," ~ arg)*)? }
-function_type = { "fn" ~ "(" ~ args ~ ")" ~ ("->" ~ type_)? }
-
 primitive = {
     "u8" | "u16" | "u32" | "u64" | "usize" |
     "i8" | "i16" | "i32" | "i64" | "isize" |
@@ -16,16 +12,16 @@ opt = { "Option" ~ "<" ~ type_ ~ ">" }
 res = { "Result" ~ "<" ~ type_ ~ ">" }
 fut = { "Future" ~ "<" ~ type_ ~ ">" }
 stream = { "Stream" ~ "<" ~ type_ ~ ">" }
-
 type_ = { primitive | ref_ | slice | vec | opt | res | fut | stream | ident }
 
+doc = @{ (!"\n" ~ ANY)* ~ "\n" }
 static_ = { "static" }
-method = { static_? ~ function }
-object = { "object" ~ ident ~ "{" ~ method* ~ "}" }
-function = { ident ~ function_type ~ ";" }
+arg = { ident ~ ":" ~ type_ }
+args = { (arg ~ ("," ~ arg)*)? }
+function = { ("///" ~ doc)* ~ static_? ~ "fn" ~ ident ~ "(" ~ args ~ ")" ~ ("->" ~ type_)?  ~ ";" }
+object = { ("///" ~ doc)* ~ "object" ~ ident ~ "{" ~ function* ~ "}" }
 
-item = { object | function }
-root = { SOI ~ item* ~ EOI }
+root = { SOI ~ ("//!" ~ doc)* ~ (object | function)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\n" }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

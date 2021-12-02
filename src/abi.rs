@@ -233,15 +233,13 @@ impl Interface {
                 };
                 let func = AbiFunction {
                     ty,
-                    name: method.func.ident.clone(),
+                    name: method.ident.clone(),
                     args: method
-                        .func
-                        .ty
                         .args
                         .iter()
                         .map(|(n, ty)| (n.clone(), self.to_type(ty)))
                         .collect(),
-                    ret: method.func.ty.ret.as_ref().map(|ty| self.to_type(ty)),
+                    ret: method.ret.as_ref().map(|ty| self.to_type(ty)),
                 };
                 methods.push(func);
             }
@@ -257,14 +255,14 @@ impl Interface {
     pub fn functions(&self) -> Vec<AbiFunction> {
         let mut funcs = vec![];
         for func in &self.functions {
+            assert!(!func.is_static);
             let name = func.ident.clone();
             let args = func
-                .ty
                 .args
                 .iter()
                 .map(|(n, ty)| (n.clone(), self.to_type(ty)))
                 .collect();
-            let ret = func.ty.ret.as_ref().map(|ty| self.to_type(ty));
+            let ret = func.ret.as_ref().map(|ty| self.to_type(ty));
             let func = AbiFunction {
                 ty: FunctionType::Function,
                 name,

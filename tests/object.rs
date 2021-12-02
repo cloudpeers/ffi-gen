@@ -3,11 +3,11 @@ use ffi_gen::compile_pass;
 compile_pass! {
     object,
     r#"
-    create fn(value: u32) -> CustomType;
-    was_dropped fn() -> bool;
+    fn create(value: u32) -> CustomType;
+    fn was_dropped() -> bool;
     object CustomType {
-        static new_ fn(value: u32) -> CustomType;
-        do_something fn() -> u32;
+        static fn new_(value: u32) -> CustomType;
+        fn do_something() -> u32;
     }
     "#,
     (
@@ -101,7 +101,7 @@ compile_pass! {
 
 compile_pass! {
     nodelay_future,
-    "create fn(value: u32) -> Future<u32>;",
+    "fn create(value: u32) -> Future<u32>;",
     (
         pub async fn create(value: u32) -> u32 {
             value
@@ -125,7 +125,7 @@ compile_pass! {
 
 compile_pass! {
     delayed_future,
-    "create fn() -> Future<u64>; wake fn();",
+    "fn create() -> Future<u64>; fn wake();",
     (
         static mut WAKER: Option<Waker> = None;
         static mut WOKEN: bool = false;
@@ -188,7 +188,7 @@ compile_pass! {
 
 compile_pass! {
     nodelay_stream,
-    "create fn(values: &[u32]) -> Stream<u32>;",
+    "fn create(values: &[u32]) -> Stream<u32>;",
     (
         struct TestStream(Vec<u32>);
 
@@ -246,7 +246,7 @@ compile_pass! {
 
 compile_pass! {
     result_future,
-    "create fn(value: u32) -> Future<Result<u32>>;",
+    "fn create(value: u32) -> Future<Result<u32>>;",
     (
         pub async fn create(value: u32) -> Result<u32, &'static str> {
             if value == 0 {

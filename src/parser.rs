@@ -10,6 +10,7 @@ struct GrammarParser;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Interface {
+    pub doc: String,
     pub functions: Vec<Function>,
     pub objects: Vec<Object>,
     idents: HashSet<String>,
@@ -17,32 +18,33 @@ pub struct Interface {
 
 impl Interface {
     pub fn parse(input: &str) -> Result<Self> {
-        let root = GrammarParser::parse(Rule::root, input)?;
+        let pairs = GrammarParser::parse(Rule::root, input)?;
+        let mut doc = String::new();
         let mut functions = vec![];
         let mut objects = vec![];
         let mut idents = HashSet::new();
-        for pair in root {
+        for pair in pairs {
             for pair in pair.into_inner() {
-                for pair in pair.into_inner() {
-                    match pair.as_rule() {
-                        Rule::object => {
-                            let obj = Object::parse(pair)?;
-                            if idents.contains(&obj.ident) {
-                                anyhow::bail!("duplicate object identifier");
-                            }
-                            idents.insert(obj.ident.clone());
-                            objects.push(obj);
+                match pair.as_rule() {
+                    Rule::doc => doc.push_str(pair.as_str()),
+                    Rule::object => {
+                        let obj = Object::parse(pair)?;
+                        if idents.contains(&obj.ident) {
+                            anyhow::bail!("duplicate object identifier");
                         }
-                        Rule::function => {
-                            let fun = Function::parse(pair)?;
-                            functions.push(fun);
-                        }
-                        _ => {}
+                        idents.insert(obj.ident.clone());
+                        objects.push(obj);
                     }
+                    Rule::function => {
+                        let fun = Function::parse(pair)?;
+                        functions.push(fun);
+                    }
+                    _ => {}
                 }
             }
         }
         Ok(Self {
+            doc: doc.trim().to_string(),
             functions,
             objects,
             idents,
@@ -56,27 +58,31 @@ impl Interface {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Object {
+    pub doc: String,
     pub ident: String,
-    pub methods: Vec<Method>,
+    pub methods: Vec<Function>,
 }
 
 impl Object {
     pub fn parse(pair: Pair<Rule>) -> Result<Self> {
+        let mut doc = String::new();
         let mut ident = None;
         let mut methods = vec![];
         for pair in pair.into_inner() {
             match pair.as_rule() {
+                Rule::doc => doc.push_str(pair.as_str()),
                 Rule::ident => {
                     ident = Some(pair.as_str().to_string());
                 }
-                Rule::method => {
-                    let method = Method::parse(pair)?;
+                Rule::function => {
+                    let method = Function::parse(pair)?;
                     methods.push(method);
                 }
                 _ => {}
             }
         }
         Ok(Self {
+            doc: doc.trim().to_string(),
             ident: ident.unwrap(),
             methods,
         })
@@ -84,73 +90,30 @@ impl Object {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Method {
-    pub is_static: bool,
-    pub func: Function,
-}
-
-impl Method {
-    pub fn parse(pair: Pair<Rule>) -> Result<Self> {
-        let mut is_static = false;
-        let mut func = None;
-        for pair in pair.into_inner() {
-            match pair.as_rule() {
-                Rule::static_ => {
-                    is_static = true;
-                }
-                Rule::function => {
-                    func = Some(Function::parse(pair)?);
-                }
-                _ => {}
-            }
-        }
-        Ok(Self {
-            is_static,
-            func: func.unwrap(),
-        })
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Function {
+    pub doc: String,
+    pub is_static: bool,
     pub ident: String,
-    pub ty: FunctionType,
-}
-
-impl Function {
-    pub fn parse(pair: Pair<Rule>) -> Result<Self> {
-        let mut ident = None;
-        let mut ty = None;
-        for pair in pair.into_inner() {
-            match pair.as_rule() {
-                Rule::ident => {
-                    ident = Some(pair.as_str().to_string());
-                }
-                Rule::function_type => {
-                    ty = Some(FunctionType::parse(pair)?);
-                }
-                _ => {}
-            }
-        }
-        Ok(Self {
-            ident: ident.unwrap(),
-            ty: ty.unwrap(),
-        })
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FunctionType {
     pub args: Vec<(String, Type)>,
     pub ret: Option<Type>,
 }
 
-impl FunctionType {
+impl Function {
     pub fn parse(pair: Pair<Rule>) -> Result<Self> {
+        let mut doc = String::new();
+        let mut is_static = false;
+        let mut ident = None;
         let mut args = vec![];
         let mut ret = None;
         for pair in pair.into_inner() {
             match pair.as_rule() {
+                Rule::doc => doc.push_str(pair.as_str()),
+                Rule::static_ => {
+                    is_static = true;
+                }
+                Rule::ident => {
+                    ident = Some(pair.as_str().to_string());
+                }
                 Rule::args => {
                     for pair in pair.into_inner() {
                         if pair.as_rule() == Rule::arg {
@@ -177,7 +140,13 @@ impl FunctionType {
                 _ => {}
             }
         }
-        Ok(Self { args, ret })
+        Ok(Self {
+            doc: doc.trim().to_string(),
+            is_static,
+            ident: ident.unwrap(),
+            args,
+            ret,
+        })
     }
 }
 
@@ -270,133 +239,147 @@ mod tests {
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn();")?;
+        let res = Interface::parse("fn hello();")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![],
-                        ret: None,
-                    }
+                    args: vec![],
+                    ret: None,
                 }],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn(a: u8);")?;
+        let res = Interface::parse("fn hello(a: u8);")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![("a".to_string(), Type::U8)],
-                        ret: None,
-                    }
+                    args: vec![("a".to_string(), Type::U8)],
+                    ret: None,
                 }],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn() -> u8;")?;
+        let res = Interface::parse("fn hello() -> u8;")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![],
-                        ret: Some(Type::U8),
-                    }
+                    args: vec![],
+                    ret: Some(Type::U8),
                 }],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn(a: &string);")?;
+        let res = Interface::parse("fn hello(a: &string);")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![("a".to_string(), Type::Ref(Box::new(Type::String)))],
-                        ret: None,
-                    }
+                    args: vec![("a".to_string(), Type::Ref(Box::new(Type::String)))],
+                    ret: None,
                 }],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn(a: &[u8]) -> Vec<i64>;")?;
+        let res = Interface::parse("fn hello(a: &[u8]) -> Vec<i64>;")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![(
-                            "a".to_string(),
-                            Type::Ref(Box::new(Type::Slice(Box::new(Type::U8))))
-                        )],
-                        ret: Some(Type::Vec(Box::new(Type::I64))),
-                    }
+                    args: vec![(
+                        "a".to_string(),
+                        Type::Ref(Box::new(Type::Slice(Box::new(Type::U8))))
+                    )],
+                    ret: Some(Type::Vec(Box::new(Type::I64))),
                 }],
                 idents: Default::default(),
             }
         );
-        let res = Interface::parse("hello fn() -> Future<u8>;")?;
+        let res = Interface::parse("fn hello() -> Future<u8>;")?;
         assert_eq!(
             res,
             Interface {
+                doc: Default::default(),
                 objects: vec![],
                 functions: vec![Function {
+                    doc: Default::default(),
+                    is_static: false,
                     ident: "hello".to_string(),
-                    ty: FunctionType {
-                        args: vec![],
-                        ret: Some(Type::Future(Box::new(Type::U8))),
-                    }
+                    args: vec![],
+                    ret: Some(Type::Future(Box::new(Type::U8))),
                 }],
                 idents: Default::default(),
             }
         );
         let res = Interface::parse(
-            "object Greeter { static new fn() -> Greeter; greet fn() -> string; }",
+            r#"
+            //! A greeter
+            //! read our beautiful docs
+            //! here
+
+            /// The main entry point of this example.
+            object Greeter {
+                /// Creates a new greeter.
+                static fn new() -> Greeter;
+                /// Returns a friendly greeting.
+                fn greet() -> string;
+            }"#,
         )?;
         assert_eq!(
             res,
             Interface {
+                doc: "A greeter\nread our beautiful docs\nhere".to_string(),
                 functions: vec![],
                 objects: vec![Object {
+                    doc: "The main entry point of this example.".to_string(),
                     ident: "Greeter".to_string(),
                     methods: vec![
-                        Method {
+                        Function {
+                            doc: "Creates a new greeter.".to_string(),
                             is_static: true,
-                            func: Function {
-                                ident: "new".to_string(),
-                                ty: FunctionType {
-                                    args: vec![],
-                                    ret: Some(Type::Ident("Greeter".to_string())),
-                                }
-                            }
+                            ident: "new".to_string(),
+                            args: vec![],
+                            ret: Some(Type::Ident("Greeter".to_string())),
                         },
-                        Method {
+                        Function {
+                            doc: "Returns a friendly greeting.".to_string(),
                             is_static: false,
-                            func: Function {
-                                ident: "greet".to_string(),
-                                ty: FunctionType {
-                                    args: vec![],
-                                    ret: Some(Type::String),
-                                }
-                            }
+                            ident: "greet".to_string(),
+                            args: vec![],
+                            ret: Some(Type::String),
                         }
                     ]
                 }],
