@@ -110,7 +110,7 @@ compile_pass! {
     (
         let _fut = __create(42);
         let _f = __create_future_poll;
-        let _d = __create_future_drop;
+        __create_future_drop(0, _fut);
     ),
     (
         final fut = api.create(42);
@@ -207,7 +207,20 @@ compile_pass! {
     (
         let values = [42, 99];
         let stream = __create(values.as_ptr() as _, values.len() as _);
-        let _poll = __create_stream_poll;
+
+        extern "C" fn callback(port: i64, _obj: &i32) {
+            assert!(port == 0 || port == 1);
+        }
+
+        let poll = __create_stream_poll(stream, callback as *const core::ffi::c_void as _, 0, 1);
+        assert_eq!(poll.ret0, 1);
+        assert_eq!(poll.ret1, 42);
+        let poll = __create_stream_poll(stream, callback as *const core::ffi::c_void as _, 0, 1);
+        assert_eq!(poll.ret0, 1);
+        assert_eq!(poll.ret1, 99);
+        let poll = __create_stream_poll(stream, callback as *const core::ffi::c_void as _, 0, 1);
+        assert_eq!(poll.ret0, 0);
+
         __create_stream_drop(0, stream);
     ),
     (
@@ -263,7 +276,7 @@ compile_pass! {
         assert(err);
     ),
     (
-        const fut = api.create(42);
+        /*const fut = api.create(42);
         assert.equal(await fut, 42);
 
         let err = false;
@@ -274,7 +287,7 @@ compile_pass! {
             assert.equal(ex, "is zero");
             err = true;
         }
-        assert.equal(err, true);
+        assert.equal(err, true);*/
     ),
     ( )
 }
