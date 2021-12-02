@@ -2,7 +2,7 @@ use ffi_gen::compile_pass;
 
 compile_pass! {
     no_args_no_ret,
-    "hello_world fn();",
+    "fn hello_world();",
     ( pub fn hello_world() {} ),
     ( __hello_world(); ),
     ( api.hello_world(); ),
@@ -22,7 +22,7 @@ compile_pass! {
 
 compile_pass! {
     no_args_ret_u8,
-    "hello_world fn() -> u8;",
+    "fn hello_world() -> u8;",
     (
         pub fn hello_world() -> u8 {
             42
@@ -46,7 +46,7 @@ compile_pass! {
 
 compile_pass! {
     args_u8_ret_u8,
-    "hello_world fn(arg: u8) -> u8;",
+    "fn hello_world(arg: u8) -> u8;",
     (
         pub fn hello_world(arg: u8) -> u8 {
             arg
@@ -69,7 +69,7 @@ compile_pass! {
 
 compile_pass! {
     args_bool_ret_bool,
-    "hello_world fn(arg: bool) -> bool;",
+    "fn hello_world(arg: bool) -> bool;",
     (
         pub fn hello_world(arg: bool) -> bool {
             arg
@@ -92,7 +92,7 @@ compile_pass! {
 
 compile_pass! {
     args_usize_ret_usize,
-    "hello_world fn(arg: usize) -> usize;",
+    "fn hello_world(arg: usize) -> usize;",
     (
         pub fn hello_world(arg: usize) -> usize {
             arg
@@ -116,7 +116,7 @@ compile_pass! {
 
 compile_pass! {
     args_f64_ret_f64,
-    "hello_world fn(arg: f64) -> f64;",
+    "fn hello_world(arg: f64) -> f64;",
     (
         pub fn hello_world(arg: f64) -> f64 {
             arg
@@ -139,7 +139,7 @@ compile_pass! {
 
 compile_pass! {
     args_str_ret_usize,
-    "strlen fn(arg: &string) -> usize;",
+    "fn strlen(arg: &string) -> usize;",
     (
         pub fn strlen(s: &str) -> usize {
             s.len()
@@ -165,7 +165,7 @@ compile_pass! {
 
 compile_pass! {
     args_string_ret_usize,
-    "strlen fn(arg: string) -> usize;",
+    "fn strlen(arg: string) -> usize;",
     (
         pub fn strlen(s: String) -> usize {
             s.len()
@@ -191,7 +191,7 @@ compile_pass! {
 
 compile_pass! {
     no_args_ret_string,
-    "make_string fn() -> string;",
+    "fn make_string() -> string;",
     (
         pub fn make_string() -> String {
             "hello world".to_string()
@@ -218,7 +218,7 @@ compile_pass! {
 
 compile_pass! {
     args_str_ret_str,
-    "as_str fn(s: &string) -> &string;",
+    "fn as_str(s: &string) -> &string;",
     (
         pub fn as_str<'a>(s: &'a str) -> &'a str {
             s
@@ -249,7 +249,7 @@ compile_pass! {
 
 compile_pass! {
     args_slice_u8_ret_vec_u8,
-    "to_vec fn(b: &[u8]) -> Vec<u8>;",
+    "fn to_vec(b: &[u8]) -> Vec<u8>;",
     (
         pub fn to_vec(b: &[u8]) -> Vec<u8> {
             b.to_vec()
@@ -279,7 +279,7 @@ compile_pass! {
 
 compile_pass! {
     args_slice_u64_ret_vec_u64,
-    "to_vec fn(b: &[u64]) -> Vec<u64>;",
+    "fn to_vec(b: &[u64]) -> Vec<u64>;",
     (
         pub fn to_vec(b: &[u64]) -> Vec<u64> {
             b.to_vec()
@@ -308,7 +308,7 @@ compile_pass! {
 
 compile_pass! {
     args_i64_ret_opt_i64,
-    "non_zero fn(num: i64) -> Option<i64>;",
+    "fn non_zero(num: i64) -> Option<i64>;",
     (
         pub fn non_zero(num: i64) -> Option<i64> {
             if num > 0 {
@@ -332,7 +332,7 @@ compile_pass! {
 
 compile_pass! {
     args_i64_ret_res_i64,
-    "non_zero fn(num: i64) -> Result<i64>;",
+    "fn non_zero(num: i64) -> Result<i64>;",
     (
         pub fn non_zero(num: i64) -> Result<i64, &'static str> {
             if num > 0 {

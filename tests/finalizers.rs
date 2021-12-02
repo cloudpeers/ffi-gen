@@ -2,8 +2,8 @@ use ffi_gen::compile_pass;
 
 compile_pass! {
     finalizers,
-    r#"make_box fn() -> CustomType;
-    was_dropped fn() -> bool;
+    r#"fn make_box() -> CustomType;
+    fn was_dropped() -> bool;
     object CustomType {}
     "#,
     (

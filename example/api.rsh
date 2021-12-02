@@ -1,1 +1,2 @@
-hello_world fn();
+/// Prints a friendly greeting to stdout.
+fn hello_world();
