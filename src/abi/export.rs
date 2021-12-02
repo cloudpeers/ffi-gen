@@ -180,16 +180,18 @@ impl Abi {
                 exports.push(Instr::LowerResult(ret, var, ok, ok_instr, err, err_instr));
             }
             AbiType::RefFuture(_ty) => todo!(),
-            AbiType::Future(_) => {
+            AbiType::Future(ty) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
-                exports.push(Instr::LowerFuture(ret, ptr));
+                let ty = (&**ty).clone();
+                exports.push(Instr::LowerFuture(ret, ptr, ty));
             }
             AbiType::RefStream(_ty) => todo!(),
-            AbiType::Stream(_) => {
+            AbiType::Stream(ty) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
-                exports.push(Instr::LowerStream(ret, ptr));
+                let ty = (&**ty).clone();
+                exports.push(Instr::LowerStream(ret, ptr, ty));
             }
         }
     }
@@ -276,9 +278,9 @@ pub enum Instr {
     LowerObject(Var, Var),
     LowerOption(Var, Var, Var, Vec<Instr>),
     LowerResult(Var, Var, Var, Vec<Instr>, Var, Vec<Instr>),
-    LowerFuture(Var, Var),
+    LowerFuture(Var, Var, AbiType),
     LiftRefFuture(Var, Var, AbiType),
-    LowerStream(Var, Var),
+    LowerStream(Var, Var, AbiType),
     LiftRefStream(Var, Var, AbiType),
     CallAbi(FunctionType, Option<Var>, String, Option<Var>, Vec<Var>),
     DefineRets(Vec<Var>),

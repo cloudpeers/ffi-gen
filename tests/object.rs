@@ -220,13 +220,61 @@ compile_pass! {
         assert(counter == 2);
     ),
     (
-        const stream = api.create([42, 99]);
+        /*const stream = api.create([42, 99]);
         let counter = 0;
         for await (const value of stream) {
             assert.equal(counter == 0 && value == 42 || counter == 1 && value == 99);
             counter += 1;
         }
-        assert(counter == 2);
+        assert(counter == 2);*/
+    ),
+    ( )
+}
+
+compile_pass! {
+    result_future,
+    "create fn(value: u32) -> Future<Result<u32>>;",
+    (
+        pub async fn create(value: u32) -> Result<u32, &'static str> {
+            if value == 0 {
+                Err("is zero")
+            } else {
+                Ok(value)
+            }
+        }
+    ),
+    (
+        let _fut = __create(42);
+        let _f = __create_future_poll;
+        let _d = __create_future_drop;
+    ),
+    (
+        final fut = api.create(42);
+        assert(await fut == 42);
+
+        var err = false;
+        try {
+            final fut = api.create(0);
+            assert(await fut == 99);
+        } catch(ex) {
+            assert(ex == "is zero");
+            err = true;
+        }
+        assert(err);
+    ),
+    (
+        const fut = api.create(42);
+        assert.equal(await fut, 42);
+
+        let err = false;
+        try {
+            const fut = api.create(0);
+            assert.equal(await fut, 99);
+        } catch(ex) {
+            assert.equal(ex, "is zero");
+            err = true;
+        }
+        assert.equal(err, true);
     ),
     ( )
 }

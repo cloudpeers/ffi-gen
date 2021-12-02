@@ -38,6 +38,8 @@ impl RustGenerator {
                 t
             }
 
+            pub type Result<T, E = String> = core::result::Result<T, E>;
+
             #[no_mangle]
             pub unsafe extern "C" fn allocate(size: usize, align: usize) -> *mut u8 {
                 let layout = std::alloc::Layout::from_size_align_unchecked(size, align);
@@ -349,12 +351,29 @@ impl RustGenerator {
             Instr::LiftRefStream(in_, out, ty) => quote! {
                 let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiStream<#(self.ty(ty))>) };
             },
-            Instr::LowerFuture(in_, out) => quote! {
-                #(self.var(out)) = Box::into_raw(Box::new(FfiFuture::new(#(self.var(in_))))) as _;
-            },
-            Instr::LowerStream(in_, out) => quote! {
-                #(self.var(out)) = Box::into_raw(Box::new(FfiStream::new(#(self.var(in_))))) as _;
-            },
+            Instr::LowerFuture(in_, out, ty) => {
+                let future = if let AbiType::Result(_) = ty {
+                    quote!(async move { Ok(#(self.var(in_)).await.map_err(|err| err.to_string())?) })
+                } else {
+                    quote!(#(self.var(in_)))
+                };
+                quote! {
+                    let #(self.var(out))_0 = #future;
+                    let #(self.var(out))_1: FfiFuture<#(self.ty(ty))> = FfiFuture::new(#(self.var(out))_0);
+                    #(self.var(out)) = Box::into_raw(Box::new(#(self.var(out))_1)) as _;
+                }
+            }
+            Instr::LowerStream(in_, out, ty) => {
+                let map_err = if let AbiType::Result(_) = ty {
+                    quote!(.map_err(|err| err.to_string()))
+                } else {
+                    quote!()
+                };
+                quote! {
+                    let #(self.var(out))_0: FfiStream<#(self.ty(ty))> = FfiStream::new(#(self.var(in_))#map_err);
+                    #(self.var(out)) = Box::into_raw(Box::new(#(self.var(out))_0)) as _;
+                }
+            }
             Instr::LowerOption(in_, var, some, some_instr) => quote! {
                 if let Some(#(self.var(some))) = #(self.var(in_)) {
                     #(self.var(var)) = 1;
@@ -418,7 +437,7 @@ impl RustGenerator {
             AbiType::RefSlice(ty) => quote!(&[#(self.num_type(*ty))]),
             AbiType::Vec(ty) => quote!(Vec<#(self.num_type(*ty))>),
             AbiType::Option(ty) => quote!(Option<#(self.ty(ty))>),
-            AbiType::Result(ty) => quote!(anyhow::Result<#(self.ty(ty))>),
+            AbiType::Result(ty) => quote!(Result<#(self.ty(ty))>),
             AbiType::RefObject(_)
             | AbiType::Object(_)
             | AbiType::RefFuture(_)
