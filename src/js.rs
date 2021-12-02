@@ -114,7 +114,7 @@ impl JsGenerator {
                 });
             }
 
-            const { ReadableStream } = require("node:stream/web");
+            const { ReadableStream } = (typeof window == "object" && { ReadableStream }) || require("node:stream/web");
 
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
