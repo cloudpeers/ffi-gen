@@ -332,19 +332,6 @@ impl Interface {
         streams
     }
 
-    pub fn exports(&self, abi: &Abi) -> Vec<export::Export> {
-        let mut exports = vec![];
-        for function in self.functions() {
-            exports.push(abi.export(&function));
-        }
-        for obj in self.objects() {
-            for method in &obj.methods {
-                exports.push(abi.export(method));
-            }
-        }
-        exports
-    }
-
     pub fn imports(&self, abi: &Abi) -> Vec<import::Import> {
         let mut imports = vec![];
         for function in self.functions() {

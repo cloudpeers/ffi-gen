@@ -1,4 +1,4 @@
-use ffi_gen::{Abi, Interface, RustGenerator};
+use ffi_gen::{Abi, FfiGen};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -38,10 +38,7 @@ pub fn ffi_gen_native_64(input: TokenStream, _: TokenStream) -> TokenStream {
 
 fn inner_ffi_gen(input: TokenStream, abi: Abi) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::LitStr);
-    let s = std::fs::read_to_string(input.value()).unwrap();
-    let iface = Interface::parse(&s).unwrap();
-    let gen = RustGenerator::new(abi);
-    let tokens = gen.generate(iface);
-    let s = tokens.to_file_string().unwrap();
-    s.parse().unwrap()
+    let ffigen = FfiGen::new(input.value()).unwrap();
+    let rust = ffigen.generate_rust(abi).unwrap();
+    rust.parse().unwrap()
 }
