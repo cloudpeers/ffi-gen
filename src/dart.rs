@@ -104,12 +104,17 @@ impl DartGenerator {
                 final completer = Completer<T>();
                 final rx = ReceivePort();
                 final poll = () {
-                    final ret = nativePoll(box.borrow(), ffi.NativeApi.postCObject.address, rx.sendPort.nativePort);
-                    if (ret != null) {
-                        rx.close();
+                    try {
+                        final ret = nativePoll(box.borrow(), ffi.NativeApi.postCObject.address, rx.sendPort.nativePort);
+                        if (ret == null) {
+                            return;
+                        }
                         completer.complete(ret);
-                        box.drop();
+                    } catch(err) {
+                        completer.completeError(err);
                     }
+                    rx.close();
+                    box.drop();
                 };
                 rx.listen((dynamic _message) => poll());
                 poll();
@@ -121,14 +126,18 @@ impl DartGenerator {
                 final rx = ReceivePort();
                 final done = ReceivePort();
                 final poll = () {
-                    final ret = nativePoll(
-                        box.borrow(),
-                        ffi.NativeApi.postCObject.address,
-                        rx.sendPort.nativePort,
-                        done.sendPort.nativePort,
-                    );
-                    if (ret != null) {
-                        controller.add(ret);
+                    try {
+                        final ret = nativePoll(
+                            box.borrow(),
+                            ffi.NativeApi.postCObject.address,
+                            rx.sendPort.nativePort,
+                            done.sendPort.nativePort,
+                        );
+                        if (ret != null) {
+                            controller.add(ret);
+                        }
+                    } catch(err) {
+                        controller.addError(err);
                     }
                 };
                 rx.listen((dynamic _message) => poll());
