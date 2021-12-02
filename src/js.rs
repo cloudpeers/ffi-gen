@@ -1,6 +1,9 @@
 use crate::import::Instr;
 use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
+use anyhow::Result;
 use genco::prelude::*;
+use std::path::Path;
+use std::process::Command;
 
 pub struct JsGenerator {
     abi: Abi,
@@ -491,6 +494,7 @@ impl WasmMultiValueShim {
         Self { abi: Abi::Wasm32 }
     }
 
+    #[cfg(feature = "test_runner")]
     pub fn generate(&self, path: &str, iface: Interface) -> rust::Tokens {
         let args = self.generate_args(iface);
         if !args.is_empty() {
@@ -514,6 +518,31 @@ impl WasmMultiValueShim {
                 assert!(ret);
             }
         }
+    }
+
+    pub fn run<P: AsRef<Path>>(&self, path: P, iface: Interface) -> Result<()> {
+        let args = self.generate_args(iface);
+        let path = path.as_ref().to_str().unwrap();
+        if !args.is_empty() {
+            let mut cmd = Command::new("multi-value-reverse-polyfill");
+            cmd.arg(path);
+            for arg in args {
+                cmd.arg(arg);
+            }
+            let status = cmd.status()?;
+            if !status.success() {
+                anyhow::bail!("multi-value-reverse-polyfill failed");
+            }
+        } else {
+            let status = Command::new("cp")
+                .arg(path)
+                .arg(format!("{}.multivalue.wasm", path))
+                .status()?;
+            if !status.success() {
+                anyhow::bail!("cp failed");
+            }
+        }
+        Ok(())
     }
 
     fn generate_args(&self, iface: Interface) -> Vec<String> {

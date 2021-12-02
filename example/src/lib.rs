@@ -1,4 +1,4 @@
-ffi_gen_macro::ffi_gen!("example/rust/api.rsh");
+ffi_gen_macro::ffi_gen!("example/api.rsh");
 
 #[cfg(target_family = "wasm")]
 extern "C" {

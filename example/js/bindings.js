@@ -15,7 +15,9 @@ function fetch_polyfill(file) {
   });
 }
 
-const { ReadableStream } = require("node:stream/web");
+const { ReadableStream } =
+  (typeof window == "object" && { ReadableStream }) ||
+  require("node:stream/web");
 
 const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
@@ -111,19 +113,27 @@ class NotifierRegistry {
 const notifierRegistry = new NotifierRegistry();
 
 const nativeFuture = (box, nativePoll) => {
-  const poll = (resolve, idx) => {
-    const ret = nativePoll(box.borrow(), 0, BigInt(idx));
-    if (ret != null) {
-      notifierRegistry.unregisterNotifier(idx);
+  const poll = (resolve, reject, idx) => {
+    try {
+      console.log(poll);
+      const ret = nativePoll(box.borrow(), 0, BigInt(idx));
+      console.log(ret);
+      if (ret == null) {
+        return;
+      }
       resolve(ret);
-      box.drop();
+    } catch (err) {
+      console.log("error", err);
+      reject(err);
     }
+    notifierRegistry.unregisterNotifier(idx);
+    box.drop();
   };
-  return new Promise((resolve, _) => {
+  return new Promise((resolve, reject) => {
     const idx = notifierRegistry.reserveSlot();
-    const notifier = () => poll(resolve, idx);
+    const notifier = () => poll(resolve, reject, idx);
     notifierRegistry.registerNotifier(idx, notifier);
-    poll(resolve, idx);
+    poll(resolve, reject, idx);
   });
 };
 

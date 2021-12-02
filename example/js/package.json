@@ -8,7 +8,5 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {
-    "wasm-ffi": "^0.3.0"
-  }
+  "dependencies": {}
 }
