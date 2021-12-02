@@ -233,13 +233,18 @@ compile_pass! {
         assert(counter == 2);
     ),
     (
-        /*const stream = api.create([42, 99]);
+        const i = setTimeout(() => {
+            // do nothing but prevent node process from exiting
+        }, 1000);
+
+        const stream = api.create([42, 99]);
         let counter = 0;
         for await (const value of stream) {
-            assert.equal(counter == 0 && value == 42 || counter == 1 && value == 99);
+            assert(counter == 0 && value == 42 || counter == 1 && value == 99);
             counter += 1;
         }
-        assert(counter == 2);*/
+        assert(counter == 2);
+        clearInterval(i);
     ),
     ( )
 }

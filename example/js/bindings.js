@@ -148,7 +148,10 @@ const nativeStream = (box, nativePoll) => {
     start(controller) {
       const nextIdx = notifierRegistry.reserveSlot();
       const doneIdx = notifierRegistry.reserveSlot();
-      const nextNotifier = () => poll(controller.enqueue, nextIdx, doneIdx);
+      const nextNotifier = () =>
+        setImmediate(() =>
+          poll((x) => controller.enqueue(x), nextIdx, doneIdx)
+        );
       const doneNotifier = () => {
         notifierRegistry.unregisterNotifier(nextIdx);
         notifierRegistry.unregisterNotifier(doneIdx);
@@ -157,7 +160,7 @@ const nativeStream = (box, nativePoll) => {
       };
       notifierRegistry.registerNotifier(nextIdx, nextNotifier);
       notifierRegistry.registerNotifier(doneIdx, doneNotifier);
-      poll(controller.enqueue, nextIdx, doneIdx);
+      nextNotifier();
     },
   });
 };
