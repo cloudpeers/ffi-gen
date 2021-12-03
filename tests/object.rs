@@ -281,7 +281,7 @@ compile_pass! {
         assert(err);
     ),
     (
-        /*const fut = api.create(42);
+        const fut = api.create(42);
         assert.equal(await fut, 42);
 
         let err = false;
@@ -292,7 +292,7 @@ compile_pass! {
             assert.equal(ex, "is zero");
             err = true;
         }
-        assert.equal(err, true);*/
+        assert.equal(err, true);
     ),
     ( )
 }
