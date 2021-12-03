@@ -300,7 +300,7 @@ impl DartGenerator {
             | Instr::MoveStream(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_))._box.move();)
             }
-            Instr::MakeObject(obj, box_, drop, out) => quote! {
+            Instr::LiftObject(obj, box_, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
@@ -326,12 +326,6 @@ impl DartGenerator {
             Instr::LiftBool(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_)) > 0;)
             }
-            Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_)).length;)
-            }
-            Instr::Allocate(ptr, len, size, align) => {
-                quote!(final #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align)).address;)
-            }
             Instr::Deallocate(ptr, len, size, align) => quote! {
                 if (#(self.var(len)) > 0) {
                     final ffi.Pointer<ffi.Void> #(self.var(ptr))_0;
@@ -339,21 +333,26 @@ impl DartGenerator {
                     #api.deallocate(#(self.var(ptr))_0, #(self.var(len)) * #(*size), #(*align));
                 }
             },
-            Instr::LowerString(in_, ptr, len) => quote! {
-                final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
+            Instr::LowerString(in_, ptr, len, size, align) => quote! {
                 final #(self.var(in_))_0 = utf8.encode(#(self.var(in_)));
-                final Uint8List #(self.var(in_))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
-                #(self.var(in_))_1.setAll(0, #(self.var(in_))_0);
+                final #(self.var(len)) = #(self.var(in_))_0.length;
+                final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 =
+                    #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                final Uint8List #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
+                #(self.var(ptr))_1.setAll(0, #(self.var(in_))_0);
+                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
                 final #(self.var(out)) = utf8.decode(#(self.var(ptr))_0.asTypedList(#(self.var(len))));
             },
-            Instr::LowerVec(in_, ptr, len, ty) => quote! {
+            Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
+                final #(self.var(len)) = #(self.var(in_)).length;
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
-                    ffi.Pointer.fromAddress(#(self.var(ptr)));
-                final #(self.var(in_))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
-                #(self.var(in_))_1.setAll(0, #(self.var(in_)));
+                    #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                final #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
+                #(self.var(ptr))_1.setAll(0, #(self.var(in_)));
+                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
