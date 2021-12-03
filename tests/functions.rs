@@ -429,37 +429,37 @@ compile_pass! {
     ),
     (),
     (
-        var x = api.u64_min();
+        var x = api.u64Min();
         assert(x == 0);
-        assert(api.u64_identity(x) == x);
+        assert(api.u64Identity(x) == x);
 
-        x = api.u64_max();
+        x = api.u64Max();
         assert(x == 0xffffffffffffffff);
-        assert(api.u64_identity(x) == x);
+        assert(api.u64Identity(x) == x);
 
-        x = api.i64_min();
+        x = api.i64Min();
         assert(x == -9223372036854775808);
-        assert(api.i64_identity(x) == x);
+        assert(api.i64Identity(x) == x);
 
-        x = api.i64_max();
+        x = api.i64Max();
         assert(x == 9223372036854775807);
-        assert(api.i64_identity(x) == x);
+        assert(api.i64Identity(x) == x);
 
-        x = api.i32_min();
+        x = api.i32Min();
         assert(x == -2147483648);
-        assert(api.i32_identity(x) == x);
+        assert(api.i32Identity(x) == x);
 
-        x = api.i32_max();
+        x = api.i32Max();
         assert(x == 2147483647);
-        assert(api.i32_identity(x) == x);
+        assert(api.i32Identity(x) == x);
 
-        x = api.u32_min();
+        x = api.u32Min();
         assert(x == 0);
-        assert(api.u32_identity(x) == x);
+        assert(api.u32Identity(x) == x);
 
-        x = api.u32_max();
+        x = api.u32Max();
         assert(x == 0xffffffff);
-        assert(api.u32_identity(x) == x);
+        assert(api.u32Identity(x) == x);
     ),
     (
         let x = api.u64_min();
