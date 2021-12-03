@@ -442,7 +442,7 @@ impl RustGenerator {
             AbiType::Vec(ty) => quote!(Vec<#(self.num_type(*ty))>),
             AbiType::Option(ty) => quote!(Option<#(self.ty(ty))>),
             AbiType::Result(ty) => quote!(Result<#(self.ty(ty))>),
-            AbiType::Object(ident) => quote!(Box<#ident>),
+            AbiType::Object(ident) => quote!(#ident),
             AbiType::RefObject(_)
             | AbiType::RefFuture(_)
             | AbiType::Future(_)
