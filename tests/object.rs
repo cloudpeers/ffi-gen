@@ -66,7 +66,7 @@ compile_pass! {
         assert(api.wasDropped());
     ),
     (
-        const boxed = CustomType.new_(api, 42);
+        const boxed = CustomType.create(api, 42);
         assert.equal(boxed.do_something(), 42);
         boxed.drop();
         assert.equal(api.was_dropped(), true);
