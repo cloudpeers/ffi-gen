@@ -251,11 +251,11 @@ impl DartGenerator {
     fn generate_function(&self, func: &AbiFunction) -> dart::Tokens {
         let ffi = self.abi.import(func);
         let api = match &func.ty {
-            FunctionType::Constructor(_) => quote!(api),
-            FunctionType::Method(_) => quote!(_api),
+            FunctionType::Constructor(_) => "api",
+            FunctionType::Method(_) => "_api",
             FunctionType::Function
             | FunctionType::PollFuture(_, _)
-            | FunctionType::PollStream(_, _) => quote!(this),
+            | FunctionType::PollStream(_, _) => "this",
         };
         let boxed = match &func.ty {
             FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(int boxed,),
@@ -267,20 +267,20 @@ impl DartGenerator {
             }
             _ => self.ident(&func.name),
         };
-        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #(self.ident(&name)),));
-        let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
+        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #(self.ident(name)),));
+        let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(api, instr))));
+        let ret = if let Some(ret) = func.ret.as_ref() {
+            self.generate_type(ret)
+        } else {
+            quote!(void)
+        };
         match &func.ty {
-            FunctionType::Constructor(object) => quote! {
-                factory #object.#name(Api api, #args) {
+            FunctionType::Constructor(_object) => quote! {
+                static #ret #name(Api api, #args) {
                     #body
                 }
             },
             _ => {
-                let ret = if let Some(ret) = func.ret.as_ref() {
-                    self.generate_type(ret)
-                } else {
-                    quote!(void)
-                };
                 quote! {
                     #ret #name(#(boxed)#args) {
                         #body
@@ -290,7 +290,7 @@ impl DartGenerator {
         }
     }
 
-    fn generate_instr(&self, api: &dart::Tokens, instr: &Instr) -> dart::Tokens {
+    fn generate_instr(&self, api: &str, instr: &Instr) -> dart::Tokens {
         match instr {
             Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = _box.borrow();),
             Instr::BorrowObject(in_, out) => {
@@ -361,7 +361,12 @@ impl DartGenerator {
                 final #(self.var(out)) = #(self.var(ptr))_0.asTypedList(#(self.var(len))).toList();
             },
             Instr::Call(symbol, ret, args) => {
-                let invoke = quote!(#api.#(format!("_{}", self.ident(symbol)))(#(for arg in args => #(self.var(arg)),)););
+                let api = if api == "this" {
+                    quote!()
+                } else {
+                    quote!(#api.)
+                };
+                let invoke = quote!(#(api)#(format!("_{}", self.ident(symbol)))(#(for arg in args => #(self.var(arg)),)););
                 if let Some(ret) = ret {
                     quote!(final #(self.var(ret)) = #invoke)
                 } else {
@@ -468,7 +473,7 @@ impl DartGenerator {
         match ret {
             Return::Void => quote!(ffi.Void),
             Return::Num(var) => self.generate_native_num_type(var.ty.num()),
-            Return::Struct(_, s) => quote!(#(self.type_ident(&s))),
+            Return::Struct(_, s) => quote!(#(self.type_ident(s))),
         }
     }
 
@@ -476,7 +481,7 @@ impl DartGenerator {
         match ret {
             Return::Void => quote!(void),
             Return::Num(var) => self.generate_wrapped_num_type(var.ty.num()),
-            Return::Struct(_, s) => quote!(#(self.type_ident(&s))),
+            Return::Struct(_, s) => quote!(#(self.type_ident(s))),
         }
     }
 
