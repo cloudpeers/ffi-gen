@@ -151,14 +151,14 @@ impl RustGenerator {
                 }
             }
 
-            #[cfg(feature = "futures")]
+            /*#[cfg(feature = "futures")]
             impl<T: futures::Stream> Stream for T {
                 type Item = T::Item;
 
                 fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
                     futures::Stream::poll_next(self, cx)
                 }
-            }
+            }*/
 
             #[repr(transparent)]
             pub struct FfiStream<T: Send + 'static>(Pin<Box<dyn Stream<Item = T> + Send + 'static>>);
@@ -337,13 +337,13 @@ impl RustGenerator {
                 };
             },
             Instr::LiftRefObject(in_, out, object) => quote! {
-                let #(self.var(out)) = unsafe { &*(#(self.var(in_)) as *const #object) };
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut #object) };
             },
             Instr::LowerRefObject(in_, out) => quote! {
                 #(self.var(out)) = #(self.var(in_)) as *const _ as _;
             },
             Instr::LiftObject(in_, out, object) => quote! {
-                let #(self.var(out)): Box<#object> = unsafe { Box::from_raw(#(self.var(in_))) };
+                let #(self.var(out)) = unsafe { Box::from_raw(#(self.var(in_)) as *mut #object) };
             },
             Instr::LowerObject(in_, out) => quote! {
                 let #(self.var(in_))_0 = assert_send_static(#(self.var(in_)));
