@@ -180,6 +180,7 @@ compile_pass! {
         }
     ),
     (
+        use core::mem::ManuallyDrop;
         let s = ManuallyDrop::new("hello world".to_string());
         assert_eq!(__strlen(s.as_ptr() as _, s.len() as _, s.capacity() as _), 11);
     ),
