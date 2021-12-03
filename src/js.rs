@@ -354,7 +354,7 @@ impl JsGenerator {
             | Instr::MoveStream(in_, out) => {
                 quote!(const #(self.var(out)) = #(self.var(in_)).box.move();)
             }
-            Instr::MakeObject(obj, box_, drop, out) => quote! {
+            Instr::LiftObject(obj, box_, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
                 const #(self.var(out)) = new #obj(#api, #(self.var(box_))_1);
@@ -379,22 +379,19 @@ impl JsGenerator {
                 quote!(const #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => quote!(const #(self.var(out)) = #(self.var(in_)) > 0;),
-            Instr::StrLen(in_, out) | Instr::VecLen(in_, out) => {
-                quote!(const #(self.var(out)) = #(self.var(in_)).length;)
-            }
-            Instr::Allocate(ptr, len, size, align) => {
-                quote!(const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));)
-            }
             Instr::Deallocate(ptr, len, size, align) => quote! {
                 if (#(self.var(len)) > 0) {
                     #api.deallocate(#(self.var(ptr)), #(self.var(len)) * #(*size), #(*align));
                 }
             },
-            Instr::LowerString(in_, ptr, len) => quote! {
-                const #(self.var(in_))_0 =
+            Instr::LowerString(in_, ptr, len, size, align) => quote! {
+                const #(self.var(in_))_0 = new TextEncoder();
+                const #(self.var(in_))_1 = #(self.var(in_))_0.encode(#(self.var(in_)));
+                const #(self.var(len)) = #(self.var(in_))_1.length;
+                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                const #(self.var(ptr))_0 =
                     new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
-                const #(self.var(in_))_1 = new TextEncoder();
-                #(self.var(in_))_1.encodeInto(#(self.var(in_)), #(self.var(in_))_0);
+                #(self.var(ptr))_0.set(#(self.var(in_))_1, 0);
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 const #(self.var(out))_0 =
@@ -402,11 +399,13 @@ impl JsGenerator {
                 const #(self.var(out))_1 = new TextDecoder();
                 const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
-            Instr::LowerVec(in_, ptr, len, ty) => quote! {
-                const #(self.var(in_))_0 =
+            Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
+                const #(self.var(len)) = #(self.var(in_)).length;
+                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                const #(self.var(ptr))_0 =
                     new #(self.generate_array(*ty))(
                         #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
-                #(self.var(in_))_0.set(#(self.var(in_)), 0);
+                #(self.var(ptr))_0.set(#(self.var(in_)), 0);
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 const #(self.var(out))_0 =

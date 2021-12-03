@@ -42,37 +42,55 @@ impl Abi {
             AbiType::RefStr => {
                 let ptr = gen.gen_num(self.iptr());
                 let len = gen.gen_num(self.uptr());
-                import.push(Instr::StrLen(arg.clone(), len.clone()));
-                import.push(Instr::Allocate(ptr.clone(), len.clone(), 1, 1));
-                import.push(Instr::LowerString(arg.clone(), ptr.clone(), len.clone()));
+                import.push(Instr::LowerString(
+                    arg.clone(),
+                    ptr.clone(),
+                    len.clone(),
+                    1,
+                    1,
+                ));
                 args.extend_from_slice(&[ptr.clone(), len.clone()]);
                 import_cleanup.push(Instr::Deallocate(ptr, len, 1, 1));
             }
             AbiType::String => {
                 let ptr = gen.gen_num(self.iptr());
                 let len = gen.gen_num(self.uptr());
-                import.push(Instr::StrLen(arg.clone(), len.clone()));
-                import.push(Instr::Allocate(ptr.clone(), len.clone(), 1, 1));
-                import.push(Instr::LowerString(arg.clone(), ptr.clone(), len.clone()));
+                import.push(Instr::LowerString(
+                    arg.clone(),
+                    ptr.clone(),
+                    len.clone(),
+                    1,
+                    1,
+                ));
                 args.extend_from_slice(&[ptr, len.clone(), len]);
             }
             AbiType::RefSlice(ty) => {
                 let ptr = gen.gen_num(self.iptr());
                 let len = gen.gen_num(self.uptr());
-                import.push(Instr::VecLen(arg.clone(), len.clone()));
                 let (size, align) = self.layout(*ty);
-                import.push(Instr::Allocate(ptr.clone(), len.clone(), size, align));
-                import.push(Instr::LowerVec(arg.clone(), ptr.clone(), len.clone(), *ty));
+                import.push(Instr::LowerVec(
+                    arg.clone(),
+                    ptr.clone(),
+                    len.clone(),
+                    *ty,
+                    size,
+                    align,
+                ));
                 args.extend_from_slice(&[ptr.clone(), len.clone()]);
                 import_cleanup.push(Instr::Deallocate(ptr, len, size, align));
             }
             AbiType::Vec(ty) => {
                 let ptr = gen.gen_num(self.iptr());
                 let len = gen.gen_num(self.uptr());
-                import.push(Instr::VecLen(arg.clone(), len.clone()));
                 let (size, align) = self.layout(*ty);
-                import.push(Instr::Allocate(ptr.clone(), len.clone(), size, align));
-                import.push(Instr::LowerVec(arg.clone(), ptr.clone(), len.clone(), *ty));
+                import.push(Instr::LowerVec(
+                    arg.clone(),
+                    ptr.clone(),
+                    len.clone(),
+                    *ty,
+                    size,
+                    align,
+                ));
                 args.extend_from_slice(&[ptr, len.clone(), len]);
             }
             AbiType::RefObject(_) => {
@@ -172,7 +190,7 @@ impl Abi {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
                 let destructor = format!("drop_box_{}", obj);
-                import.push(Instr::MakeObject(obj.clone(), ptr, destructor, out));
+                import.push(Instr::LiftObject(obj.clone(), ptr, destructor, out));
             }
             AbiType::Option(ty) => {
                 let var = gen.gen_num(NumType::U8);
@@ -273,31 +291,28 @@ impl Abi {
 
 #[derive(Clone, Debug)]
 pub enum Instr {
+    BindArg(String, Var),
+    Deallocate(Var, Var, usize, usize),
+    LiftNum(Var, Var, NumType),
+    LowerNum(Var, Var, NumType),
+    LiftBool(Var, Var),
+    LowerBool(Var, Var),
+    LiftString(Var, Var, Var),
+    LowerString(Var, Var, Var, usize, usize),
+    LiftVec(Var, Var, Var, NumType),
+    LowerVec(Var, Var, Var, NumType, usize, usize),
+    HandleNull(Var),
+    HandleError(Var, Var, Var, Var),
     BorrowSelf(Var),
     BorrowObject(Var, Var),
     MoveObject(Var, Var),
+    LiftObject(String, Var, String, Var),
     MoveFuture(Var, Var),
+    LiftFuture(Var, String, String, Var),
     MoveStream(Var, Var),
-    MakeObject(String, Var, String, Var),
-    BindArg(String, Var),
-    LowerNum(Var, Var, NumType),
-    LiftNum(Var, Var, NumType),
-    LowerBool(Var, Var),
-    LiftBool(Var, Var),
-    StrLen(Var, Var),
-    VecLen(Var, Var),
-    Allocate(Var, Var, usize, usize),
-    Deallocate(Var, Var, usize, usize),
-    LowerString(Var, Var, Var),
-    LiftString(Var, Var, Var),
-    LowerVec(Var, Var, Var, NumType),
-    LiftVec(Var, Var, Var, NumType),
+    LiftStream(Var, String, String, Var),
     Call(String, Option<Var>, Vec<Var>),
+    BindRets(Var, Vec<Var>),
     ReturnValue(Var),
     ReturnVoid,
-    HandleNull(Var),
-    HandleError(Var, Var, Var, Var),
-    BindRets(Var, Vec<Var>),
-    LiftFuture(Var, String, String, Var),
-    LiftStream(Var, String, String, Var),
 }

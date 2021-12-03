@@ -148,9 +148,17 @@ compile_pass! {
     (
         let s = "hello world";
         assert_eq!(__strlen(s.as_ptr() as _, s.len() as _), 11);
+        let s = "مرحبا بالعالم";
+        assert_eq!(__strlen(s.as_ptr() as _, s.len() as _), 25);
     ),
-    ( assert(api.strlen("hello world") == 11); ),
-    ( assert.equal(api.strlen("hello world"), 11); ),
+    (
+        assert(api.strlen("hello world") == 11);
+        assert(api.strlen("مرحبا بالعالم") == 25);
+    ),
+    (
+        assert.equal(api.strlen("hello world"), 11);
+        assert.equal(api.strlen("مرحبا بالعالم"), 25);
+    ),
     (
     export class Api {
         constructor();
