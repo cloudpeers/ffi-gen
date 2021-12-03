@@ -513,8 +513,8 @@ impl DartGenerator {
         }
     }
 
-    fn generate_doc(&self, doc: &str) -> dart::Tokens {
-        quote!(#(for line in doc.lines() => #(static_literal("///")) #line))
+    fn generate_doc(&self, doc: &[String]) -> dart::Tokens {
+        quote!(#(for line in doc => #(static_literal("///")) #line #<line>))
     }
 
     fn type_ident(&self, s: &str) -> String {
@@ -541,7 +541,7 @@ pub mod test_runner {
         let rust_gen = RustGenerator::new(Abi::native());
         let rust_tokens = rust_gen.generate(iface.clone());
         let mut dart_file = NamedTempFile::new()?;
-        let dart_gen = DartGenerator::new("compile_pass".to_string());
+        let dart_gen = DartGenerator::new("compile_pass".to_string(), "compile_pass".to_string());
         let dart_tokens = dart_gen.generate(iface);
 
         let library_tokens = quote! {

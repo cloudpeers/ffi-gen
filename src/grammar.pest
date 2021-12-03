@@ -15,13 +15,15 @@ stream = { "Stream" ~ "<" ~ type_ ~ ">" }
 type_ = { primitive | ref_ | slice | vec | opt | res | fut | stream | ident }
 
 doc = @{ (!"\n" ~ ANY)* ~ "\n" }
+module_docs = @{ "//!" ~ doc }
+item_docs = @{ "///" ~ doc }
 static_ = { "static" }
 arg = { ident ~ ":" ~ type_ }
 args = { (arg ~ ("," ~ arg)*)? }
-function = { ("///" ~ doc)* ~ static_? ~ "fn" ~ ident ~ "(" ~ args ~ ")" ~ ("->" ~ type_)?  ~ ";" }
-object = { ("///" ~ doc)* ~ "object" ~ ident ~ "{" ~ function* ~ "}" }
+function = { item_docs* ~ static_? ~ "fn" ~ ident ~ "(" ~ args ~ ")" ~ ("->" ~ type_)?  ~ ";" }
+object = { item_docs* ~ "object" ~ ident ~ "{" ~ function* ~ "}" }
 
-root = { SOI ~ ("//!" ~ doc)* ~ (object | function)* ~ EOI }
+root = { SOI ~ module_docs* ~ (object | function)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\n" }
 COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ !("/" | "!" | "\n") ~ (!"\n" ~ ANY)* ~ "\n") }
