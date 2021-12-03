@@ -2,6 +2,7 @@ use crate::import::{Import, Instr};
 use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
 use genco::prelude::*;
 use genco::tokens::static_literal;
+use heck::*;
 
 pub struct DartGenerator {
     abi: Abi,
@@ -262,15 +263,15 @@ impl DartGenerator {
         };
         let name = match &func.ty {
             FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => {
-                format!("_{}", ffi.symbol)
+                format!("__{}", self.ident(&ffi.symbol))
             }
-            _ => func.name.clone(),
+            _ => self.ident(&func.name),
         };
-        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #name,));
+        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #(self.ident(&name)),));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
         match &func.ty {
             FunctionType::Constructor(object) => quote! {
-                factory #object.#(&func.name)(Api api, #args) {
+                factory #object.#name(Api api, #args) {
                     #body
                 }
             },
@@ -306,7 +307,7 @@ impl DartGenerator {
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = #obj._(#api, #(self.var(box_))_1);
             },
-            Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #arg;),
+            Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #(self.ident(arg));),
             Instr::BindRets(ret, vars) => {
                 if vars.len() > 1 {
                     quote! {
@@ -360,7 +361,7 @@ impl DartGenerator {
                 final #(self.var(out)) = #(self.var(ptr))_0.asTypedList(#(self.var(len))).toList();
             },
             Instr::Call(symbol, ret, args) => {
-                let invoke = quote!(#api.#symbol(#(for arg in args => #(self.var(arg)),)););
+                let invoke = quote!(#api.#(format!("_{}", self.ident(symbol)))(#(for arg in args => #(self.var(arg)),)););
                 if let Some(ret) = ret {
                     quote!(final #(self.var(ret)) = #invoke)
                 } else {
@@ -390,13 +391,13 @@ impl DartGenerator {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
-                final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
+                final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
             },
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
-                final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
+                final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
             },
         }
     }
@@ -412,12 +413,12 @@ impl DartGenerator {
             quote!(#(for var in &func.args => #(self.generate_wrapped_num_type(var.ty.num())),));
         let native_ret = self.generate_native_return_type(&func.ret);
         let wrapped_ret = self.generate_wrapped_return_type(&func.ret);
-        let symbol_ptr = format!("{}Ptr", &func.symbol);
+        let symbol_ptr = format!("_{}Ptr", self.ident(&func.symbol));
         quote! {
-            late final #(&symbol_ptr)  =
+            late final #(&symbol_ptr) =
                 _lookup<ffi.NativeFunction<#native_ret Function(#native_args)>>(#_(#(&func.symbol)));
 
-            late final #(&func.symbol) =
+            late final #(format!("_{}", self.ident(&func.symbol))) =
                 #symbol_ptr.asFunction<#wrapped_ret Function(#wrapped_args)>();
         }
     }
@@ -467,7 +468,7 @@ impl DartGenerator {
         match ret {
             Return::Void => quote!(ffi.Void),
             Return::Num(var) => self.generate_native_num_type(var.ty.num()),
-            Return::Struct(_, s) => quote!(#s),
+            Return::Struct(_, s) => quote!(#(self.type_ident(&s))),
         }
     }
 
@@ -475,14 +476,14 @@ impl DartGenerator {
         match ret {
             Return::Void => quote!(void),
             Return::Num(var) => self.generate_wrapped_num_type(var.ty.num()),
-            Return::Struct(_, s) => quote!(#s),
+            Return::Struct(_, s) => quote!(#(self.type_ident(&s))),
         }
     }
 
     fn generate_return_struct(&self, ret: &Return) -> dart::Tokens {
         if let Return::Struct(vars, name) = ret {
             quote! {
-                class #name extends ffi.Struct {
+                class #(self.type_ident(name)) extends ffi.Struct {
                     #(for (i, var) in vars.iter().enumerate() => #(self.generate_return_struct_field(i, var.ty.num())))
                 }
             }
@@ -496,6 +497,14 @@ impl DartGenerator {
             @#(self.generate_native_num_type(ty))()
             external #(self.generate_wrapped_num_type(ty)) #(format!("arg{}", i));
         }
+    }
+
+    fn type_ident(&self, s: &str) -> String {
+        s.to_camel_case()
+    }
+
+    fn ident(&self, s: &str) -> String {
+        s.to_mixed_case()
     }
 }
 
