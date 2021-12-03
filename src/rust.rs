@@ -16,11 +16,14 @@ impl RustGenerator {
 
     pub fn generate(&self, iface: Interface) -> rust::Tokens {
         quote! {
+        #[allow(unused)]
+        mod api {
             use core::future::Future;
             use core::mem::ManuallyDrop;
             use core::pin::Pin;
             use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
             use std::sync::Arc;
+            use super::*;
 
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
@@ -187,6 +190,7 @@ impl RustGenerator {
             #(for fut in iface.futures() => #(self.generate_future(&fut)))
             #(for fut in iface.streams() => #(self.generate_stream(&fut)))
         }
+        }
     }
 
     fn generate_function(&self, func: &AbiFunction) -> rust::Tokens {
@@ -269,7 +273,7 @@ impl RustGenerator {
             quote! {
                 #[repr(C)]
                 pub struct #name {
-                    #(for (i, var) in vars.iter().enumerate() => #(format!("ret{}", i)): #(self.ty(&var.ty)),)
+                    #(for (i, var) in vars.iter().enumerate() => #(format!("pub ret{}", i)): #(self.ty(&var.ty)),)
                 }
             }
         } else {
@@ -479,6 +483,7 @@ pub mod test_runner {
             #gen_tokens
             #api
             fn main() {
+                use api::*;
                 #test
             }
         };
