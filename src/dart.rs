@@ -51,59 +51,59 @@ impl DartGenerator {
             class Box {
                 final Api _api;
                 final ffi.Pointer<ffi.Void> _ptr;
-                final String _drop_symbol;
+                final String _dropSymbol;
                 bool _dropped;
                 bool _moved;
                 ffi.Pointer<ffi.Void> _finalizer = ffi.Pointer.fromAddress(0);
 
-                Box(this._api, this._ptr, this._drop_symbol) : _dropped = false, _moved = false;
+                Box(this._api, this._ptr, this._dropSymbol) : _dropped = false, _moved = false;
 
-                late final _dropPtr = this._api._lookup<
+                late final _dropPtr = _api._lookup<
                     ffi.NativeFunction<
-                        ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>>(this._drop_symbol);
+                        ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>>(_dropSymbol);
 
                 late final _drop = _dropPtr.asFunction<
                     void Function(ffi.Pointer<ffi.Void>, ffi.Pointer<ffi.Void>)>();
 
                 int borrow() {
-                    if (this._dropped) {
-                        throw new StateError("use after free");
+                    if (_dropped) {
+                        throw StateError("use after free");
                     }
-                    if (this._moved) {
-                        throw new StateError("use after move");
+                    if (_moved) {
+                        throw StateError("use after move");
                     }
-                    return this._ptr.address;
+                    return _ptr.address;
                 }
 
                 int move() {
-                    if (this._dropped) {
-                        throw new StateError("use after free");
+                    if (_dropped) {
+                        throw StateError("use after free");
                     }
-                    if (this._moved) {
-                        throw new StateError("can't move value twice");
+                    if (_moved) {
+                        throw StateError("can't move value twice");
                     }
-                    this._moved = true;
+                    _moved = true;
                     _unregisterFinalizer(this);
-                    return this._ptr.address;
+                    return _ptr.address;
                 }
 
                 void drop() {
-                    if (this._dropped) {
-                        throw new StateError("double free");
+                    if (_dropped) {
+                        throw StateError("double free");
                     }
-                    if (this._moved) {
-                        throw new StateError("can't drop moved value");
+                    if (_moved) {
+                        throw StateError("can't drop moved value");
                     }
-                    this._dropped = true;
+                    _dropped = true;
                     _unregisterFinalizer(this);
-                    this._drop(ffi.Pointer.fromAddress(0), this._ptr);
+                    _drop(ffi.Pointer.fromAddress(0), _ptr);
                 }
             }
 
             Future<T> _nativeFuture<T>(Box box, T? Function(int, int, int) nativePoll) {
                 final completer = Completer<T>();
                 final rx = ReceivePort();
-                final poll = () {
+                void poll() {
                     try {
                         final ret = nativePoll(box.borrow(), ffi.NativeApi.postCObject.address, rx.sendPort.nativePort);
                         if (ret == null) {
@@ -115,7 +115,7 @@ impl DartGenerator {
                     }
                     rx.close();
                     box.drop();
-                };
+                }
                 rx.listen((dynamic _message) => poll());
                 poll();
                 return completer.future;
@@ -125,7 +125,7 @@ impl DartGenerator {
                 final controller = StreamController<T>();
                 final rx = ReceivePort();
                 final done = ReceivePort();
-                final poll = () {
+                void poll() {
                     try {
                         final ret = nativePoll(
                             box.borrow(),
@@ -139,7 +139,7 @@ impl DartGenerator {
                     } catch(err) {
                         controller.addError(err);
                     }
-                };
+                }
                 rx.listen((dynamic _message) => poll());
                 done.listen((dynamic _message) {
                     rx.close();
@@ -199,7 +199,7 @@ impl DartGenerator {
                 }
 
                 void deallocate<T extends ffi.NativeType>(ffi.Pointer pointer, int byteCount, int alignment) {
-                    this._deallocate(pointer.cast(), byteCount, alignment);
+                    _deallocate(pointer.cast(), byteCount, alignment);
                 }
 
                 #(for func in iface.functions() => #(self.generate_function(&func)))
@@ -216,7 +216,7 @@ impl DartGenerator {
                         ffi.Void Function(ffi.Pointer<ffi.Uint8>, ffi.IntPtr, ffi.IntPtr)>>("deallocate");
 
                 late final _deallocate = _deallocatePtr.asFunction<
-                    Function(ffi.Pointer<ffi.Uint8>, int, int)>();
+                    void Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
                 #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
@@ -241,7 +241,7 @@ impl DartGenerator {
                 #(for func in &obj.methods => #(self.generate_function(func)))
 
                 void drop() {
-                    this._box.drop();
+                    _box.drop();
                 }
             }
         }
@@ -251,7 +251,7 @@ impl DartGenerator {
         let ffi = self.abi.import(func);
         let api = match &func.ty {
             FunctionType::Constructor(_) => quote!(api),
-            FunctionType::Method(_) => quote!(this._api),
+            FunctionType::Method(_) => quote!(_api),
             FunctionType::Function
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => quote!(this),
@@ -291,7 +291,7 @@ impl DartGenerator {
 
     fn generate_instr(&self, api: &dart::Tokens, instr: &Instr) -> dart::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = this._box.borrow();),
+            Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = _box.borrow();),
             Instr::BorrowObject(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_))._box.borrow();)
             }
@@ -302,9 +302,9 @@ impl DartGenerator {
             }
             Instr::LiftObject(obj, box_, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
-                final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
+                final #(self.var(box_))_1 = Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
-                final #(self.var(out)) = new #obj._(#api, #(self.var(box_))_1);
+                final #(self.var(out)) = #obj._(#api, #(self.var(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #arg;),
             Instr::BindRets(ret, vars) => {
@@ -388,13 +388,13 @@ impl DartGenerator {
             },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
-                final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
+                final #(self.var(box_))_1 = Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
             },
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
-                final #(self.var(box_))_1 = new Box(#api, #(self.var(box_))_0, #_(#drop));
+                final #(self.var(box_))_1 = Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
             },
