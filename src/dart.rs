@@ -291,6 +291,7 @@ impl DartGenerator {
             },
             _ => {
                 quote! {
+                    #(self.generate_doc(&func.doc))
                     #ret #name(#(boxed)#args) {
                         #body
                     }
