@@ -127,6 +127,10 @@ compile_pass! {
     delayed_future,
     "fn create() -> Future<u64>; fn wake();",
     (
+        use core::future::Future;
+        use core::pin::Pin;
+        use core::task::{Context, Poll, Waker};
+
         static mut WAKER: Option<Waker> = None;
         static mut WOKEN: bool = false;
 
@@ -190,6 +194,10 @@ compile_pass! {
     nodelay_stream,
     "fn create(values: &[u32]) -> Stream<u32>;",
     (
+        use crate::api::Stream;
+        use core::pin::Pin;
+        use core::task::{Context, Poll};
+
         struct TestStream(Vec<u32>);
 
         impl Stream for TestStream {
