@@ -197,6 +197,8 @@ class Api {
     _deallocate(pointer.cast(), byteCount, alignment);
   }
 
+  /// Prints a friendly greeting to stdout.
+
   void helloWorld() {
     _helloWorld();
     return;

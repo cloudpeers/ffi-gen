@@ -248,7 +248,9 @@ impl JsGenerator {
                     start(controller) {
                         const nextIdx = notifierRegistry.reserveSlot();
                         const doneIdx = notifierRegistry.reserveSlot();
-                        const nextNotifier = () => poll(controller.enqueue, nextIdx, doneIdx);
+                        const nextNotifier = () => setImmediate(() =>
+                            poll(x => controller.enqueue(x), nextIdx, doneIdx)
+                        );
                         const doneNotifier = () => {
                             notifierRegistry.unregisterNotifier(nextIdx);
                             notifierRegistry.unregisterNotifier(doneIdx);
@@ -257,7 +259,7 @@ impl JsGenerator {
                         };
                         notifierRegistry.registerNotifier(nextIdx, nextNotifier);
                         notifierRegistry.registerNotifier(doneIdx, doneNotifier);
-                        poll(controller.enqueue, nextIdx, doneIdx);
+                        nextNotifier();
                     },
                 });
             };
@@ -369,6 +371,22 @@ impl JsGenerator {
                 } else {
                     quote!(const #(self.var(&vars[0])) = #(self.var(ret));)
                 }
+            }
+            Instr::LiftNumFromU32Tuple(low, high, out, num_type) => {
+                let arr = match num_type {
+                    NumType::U64 => quote!(BigUint64Array),
+                    NumType::I64 => quote!(BigInt64Array),
+                    _ => unreachable!(),
+                };
+                quote! {
+                    const #(self.var(out))_0 = new Uint32Array(2);
+                    #(self.var(out))_0[0] = #(self.var(low));
+                    #(self.var(out))_0[1] = #(self.var(high));
+                    const #(self.var(out)) = new #(arr)(#(self.var(out))_0.buffer)[0];
+                }
+            }
+            Instr::LiftNum(r#in, out, NumType::U32) => {
+                quote!(const #(self.var(out)) = #(self.var(r#in)) >>> 0;)
             }
             // Casts below i32 are no ops as wasm only has i32 and i64
             // TODO

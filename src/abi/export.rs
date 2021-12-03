@@ -102,6 +102,15 @@ impl Abi {
         rets: &mut Vec<Var>,
     ) {
         match &ret.ty {
+            AbiType::Num(num)
+                if matches!((self, num), (Abi::Wasm32, NumType::U64 | NumType::I64)) =>
+            {
+                let low = gen.gen_num(self.uptr());
+                let high = gen.gen_num(self.uptr());
+                rets.extend_from_slice(&[low.clone(), high.clone()]);
+                let num_type = *num;
+                exports.push(Instr::LowerNumAsU32Tuple(ret, low, high, num_type));
+            }
             AbiType::Num(num) => {
                 let out = gen.gen_num(*num);
                 rets.push(out.clone());
@@ -161,7 +170,11 @@ impl Abi {
                 exports.push(Instr::LowerObject(ret, ptr));
             }
             AbiType::Option(ty) => {
-                let var = gen.gen_num(NumType::U8);
+                let var = gen.gen_num(if matches!(self, Abi::Wasm32 | Abi::Wasm64) {
+                    self.iptr()
+                } else {
+                    NumType::U8
+                });
                 let some = gen.gen((&**ty).clone());
                 rets.push(var.clone());
                 let mut some_instr = vec![];
@@ -169,7 +182,11 @@ impl Abi {
                 exports.push(Instr::LowerOption(ret, var, some, some_instr));
             }
             AbiType::Result(ty) => {
-                let var = gen.gen_num(NumType::U8);
+                let var = gen.gen_num(if matches!(self, Abi::Wasm32 | Abi::Wasm64) {
+                    self.iptr()
+                } else {
+                    NumType::U8
+                });
                 let ok = gen.gen((&**ty).clone());
                 let err = gen.gen(AbiType::String);
                 rets.push(var.clone());
@@ -258,6 +275,7 @@ impl Abi {
 pub enum Instr {
     LiftNum(Var, Var),
     LowerNum(Var, Var),
+    LowerNumAsU32Tuple(Var, Var, Var, NumType),
     LiftIsize(Var, Var),
     LowerIsize(Var, Var),
     LiftUsize(Var, Var),

@@ -286,6 +286,12 @@ impl RustGenerator {
             Instr::LiftNum(in_, out) | Instr::LiftIsize(in_, out) | Instr::LiftUsize(in_, out) => {
                 quote!(let #(self.var(out)) = #(self.var(in_)) as _;)
             }
+            Instr::LowerNumAsU32Tuple(r#in, low, high, _num_type) => {
+                quote! {
+                    #(self.var(low)) = #(self.var(r#in)) as u32;
+                    #(self.var(high)) = (#(self.var(r#in)) >> 32) as u32;
+                }
+            }
             Instr::LowerNum(in_, out)
             | Instr::LowerIsize(in_, out)
             | Instr::LowerUsize(in_, out) => quote!(#(self.var(out)) = #(self.var(in_)) as _;),
