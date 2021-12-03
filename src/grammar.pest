@@ -24,4 +24,4 @@ object = { ("///" ~ doc)* ~ "object" ~ ident ~ "{" ~ function* ~ "}" }
 root = { SOI ~ ("//!" ~ doc)* ~ (object | function)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\n" }
-COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ !("/" | "!" | "\n") ~ (!"\n" ~ ANY)* ~ "\n") }
