@@ -377,3 +377,41 @@ compile_pass! {
     ),
     ( )
 }
+
+compile_pass! {
+    num_min_max,
+    "
+       fn u64_min() -> u64;
+       fn u64_max() -> u64;
+       fn i64_min() -> i64;
+       fn i64_max() -> i64;
+    ",
+    (
+        pub fn u64_min() -> u64 {
+            u64::MIN
+        }
+        pub fn u64_max() -> u64 {
+            u64::MAX
+        }
+        pub fn i64_min() -> i64 {
+            i64::MIN
+        }
+        pub fn i64_max() -> i64 {
+            i64::MAX
+        }
+    ),
+    (),
+    (
+        assert(api.u64_min() == 0);
+        assert(api.u64_max() == 0xffffffffffffffff);
+        assert(api.i64_min() == -9223372036854775808);
+        assert(api.i64_max() == 9223372036854775807);
+    ),
+    (
+        assert.equal(api.u64_min(), 0n);
+        assert.equal(api.u64_max(), 0xffff_ffff_ffff_ffffn);
+        assert.equal(api.i64_min(), -9223372036854775808n);
+        assert.equal(api.i64_max(), 9223372036854775807n);
+    ),
+    ()
+}

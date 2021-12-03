@@ -372,6 +372,24 @@ impl JsGenerator {
                     quote!(const #(self.var(&vars[0])) = #(self.var(ret));)
                 }
             }
+            Instr::LowerNum(in_, out, NumType::U64) => {
+                //todo!();
+                quote!(const #(self.var(out)) = #(self.var(in_));)
+            }
+
+            Instr::LiftNumFromU32Tuple(low, high, out, num_type) => {
+                let arr = match num_type {
+                    NumType::U64 => quote!(BigUint64Array),
+                    NumType::I64 => quote!(BigInt64Array),
+                    _ => unreachable!(),
+                };
+                quote! {
+                    const #(self.var(out))_0 = new Uint32Array(2);
+                    #(self.var(out))_0[0] = #(self.var(low));
+                    #(self.var(out))_0[1] = #(self.var(high));
+                    const #(self.var(out)) = new #(arr)(#(self.var(out))_0.buffer)[0];
+                }
+            }
             // Casts below i32 are no ops as wasm only has i32 and i64
             // TODO
             Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {

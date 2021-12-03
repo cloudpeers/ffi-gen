@@ -398,6 +398,7 @@ impl DartGenerator {
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("_{}", poll)));
             },
+            Instr::LiftNumFromU32Tuple(..) => unreachable!(),
         }
     }
 
