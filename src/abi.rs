@@ -58,7 +58,7 @@ pub enum FunctionType {
 
 #[derive(Clone, Debug)]
 pub struct AbiFunction {
-    pub doc: String,
+    pub doc: Vec<String>,
     pub ty: FunctionType,
     pub name: String,
     pub args: Vec<(String, AbiType)>,
@@ -88,7 +88,7 @@ impl AbiFunction {
 
 #[derive(Clone, Debug)]
 pub struct AbiObject {
-    pub doc: String,
+    pub doc: Vec<String>,
     pub name: String,
     pub methods: Vec<AbiFunction>,
     pub destructor: String,
@@ -104,7 +104,7 @@ impl AbiFuture {
     pub fn poll(&self) -> AbiFunction {
         AbiFunction {
             ty: FunctionType::PollFuture(self.symbol.clone(), self.ty.clone()),
-            doc: "".to_string(),
+            doc: vec![],
             name: "poll".to_string(),
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),
@@ -125,7 +125,7 @@ impl AbiStream {
     pub fn poll(&self) -> AbiFunction {
         AbiFunction {
             ty: FunctionType::PollStream(self.symbol.clone(), self.ty.clone()),
-            doc: "".to_string(),
+            doc: vec![],
             name: "poll".to_string(),
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),

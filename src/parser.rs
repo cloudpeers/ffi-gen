@@ -10,7 +10,7 @@ struct GrammarParser;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Interface {
-    pub doc: String,
+    pub doc: Vec<String>,
     pub functions: Vec<Function>,
     pub objects: Vec<Object>,
     idents: HashSet<String>,
@@ -19,14 +19,16 @@ pub struct Interface {
 impl Interface {
     pub fn parse(input: &str) -> Result<Self> {
         let pairs = GrammarParser::parse(Rule::root, input)?;
-        let mut doc = String::new();
+        let mut doc = vec![];
         let mut functions = vec![];
         let mut objects = vec![];
         let mut idents = HashSet::new();
         for pair in pairs {
             for pair in pair.into_inner() {
                 match pair.as_rule() {
-                    Rule::doc => doc.push_str(pair.as_str()),
+                    Rule::module_docs => {
+                        doc.push(pair.as_str()[3..].trim().to_string());
+                    }
                     Rule::object => {
                         let obj = Object::parse(pair)?;
                         if idents.contains(&obj.ident) {
@@ -44,7 +46,7 @@ impl Interface {
             }
         }
         Ok(Self {
-            doc: doc.trim().to_string(),
+            doc,
             functions,
             objects,
             idents,
@@ -58,19 +60,21 @@ impl Interface {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Object {
-    pub doc: String,
+    pub doc: Vec<String>,
     pub ident: String,
     pub methods: Vec<Function>,
 }
 
 impl Object {
     pub fn parse(pair: Pair<Rule>) -> Result<Self> {
-        let mut doc = String::new();
+        let mut doc = vec![];
         let mut ident = None;
         let mut methods = vec![];
         for pair in pair.into_inner() {
             match pair.as_rule() {
-                Rule::doc => doc.push_str(pair.as_str()),
+                Rule::item_docs => {
+                    doc.push(pair.as_str()[3..].trim().to_string());
+                }
                 Rule::ident => {
                     ident = Some(pair.as_str().to_string());
                 }
@@ -82,7 +86,7 @@ impl Object {
             }
         }
         Ok(Self {
-            doc: doc.trim().to_string(),
+            doc,
             ident: ident.unwrap(),
             methods,
         })
@@ -91,7 +95,7 @@ impl Object {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Function {
-    pub doc: String,
+    pub doc: Vec<String>,
     pub is_static: bool,
     pub ident: String,
     pub args: Vec<(String, Type)>,
@@ -100,14 +104,16 @@ pub struct Function {
 
 impl Function {
     pub fn parse(pair: Pair<Rule>) -> Result<Self> {
-        let mut doc = String::new();
+        let mut doc = vec![];
         let mut is_static = false;
         let mut ident = None;
         let mut args = vec![];
         let mut ret = None;
         for pair in pair.into_inner() {
             match pair.as_rule() {
-                Rule::doc => doc.push_str(pair.as_str()),
+                Rule::item_docs => {
+                    doc.push(pair.as_str()[3..].trim().to_string());
+                }
                 Rule::static_ => {
                     is_static = true;
                 }
@@ -141,7 +147,7 @@ impl Function {
             }
         }
         Ok(Self {
-            doc: doc.trim().to_string(),
+            doc,
             is_static,
             ident: ident.unwrap(),
             args,
@@ -347,6 +353,7 @@ mod tests {
         let res = Interface::parse(
             r#"
             //! A greeter
+            //!
             //! read our beautiful docs
             //! here
 
@@ -361,21 +368,26 @@ mod tests {
         assert_eq!(
             res,
             Interface {
-                doc: "A greeter\nread our beautiful docs\nhere".to_string(),
+                doc: vec![
+                    "A greeter".to_string(),
+                    "".to_string(),
+                    "read our beautiful docs".to_string(),
+                    "here".to_string(),
+                ],
                 functions: vec![],
                 objects: vec![Object {
-                    doc: "The main entry point of this example.".to_string(),
+                    doc: vec!["The main entry point of this example.".to_string(),],
                     ident: "Greeter".to_string(),
                     methods: vec![
                         Function {
-                            doc: "Creates a new greeter.".to_string(),
+                            doc: vec!["Creates a new greeter.".to_string(),],
                             is_static: true,
                             ident: "new".to_string(),
                             args: vec![],
                             ret: Some(Type::Ident("Greeter".to_string())),
                         },
                         Function {
-                            doc: "Returns a friendly greeting.".to_string(),
+                            doc: vec!["Returns a friendly greeting.".to_string(),],
                             is_static: false,
                             ident: "greet".to_string(),
                             args: vec![],
