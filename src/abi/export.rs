@@ -170,7 +170,11 @@ impl Abi {
                 exports.push(Instr::LowerObject(ret, ptr));
             }
             AbiType::Option(ty) => {
-                let var = gen.gen_num(self.iptr());
+                let var = gen.gen_num(if matches!(self, Abi::Wasm32 | Abi::Wasm64) {
+                    self.iptr()
+                } else {
+                    NumType::U8
+                });
                 let some = gen.gen((&**ty).clone());
                 rets.push(var.clone());
                 let mut some_instr = vec![];
@@ -178,7 +182,11 @@ impl Abi {
                 exports.push(Instr::LowerOption(ret, var, some, some_instr));
             }
             AbiType::Result(ty) => {
-                let var = gen.gen_num(self.iptr());
+                let var = gen.gen_num(if matches!(self, Abi::Wasm32 | Abi::Wasm64) {
+                    self.iptr()
+                } else {
+                    NumType::U8
+                });
                 let ok = gen.gen((&**ty).clone());
                 let err = gen.gen(AbiType::String);
                 rets.push(var.clone());
