@@ -16,11 +16,14 @@ impl RustGenerator {
 
     pub fn generate(&self, iface: Interface) -> rust::Tokens {
         quote! {
+        #[allow(unused)]
+        mod api {
             use core::future::Future;
             use core::mem::ManuallyDrop;
             use core::pin::Pin;
             use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
             use std::sync::Arc;
+            use super::*;
 
             /// Try to execute some function, catching any panics and aborting to make sure Rust
             /// doesn't unwind across the FFI boundary.
@@ -148,14 +151,14 @@ impl RustGenerator {
                 }
             }
 
-            #[cfg(feature = "futures")]
+            /*#[cfg(feature = "futures")]
             impl<T: futures::Stream> Stream for T {
                 type Item = T::Item;
 
                 fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
                     futures::Stream::poll_next(self, cx)
                 }
-            }
+            }*/
 
             #[repr(transparent)]
             pub struct FfiStream<T: Send + 'static>(Pin<Box<dyn Stream<Item = T> + Send + 'static>>);
@@ -186,6 +189,7 @@ impl RustGenerator {
             #(for obj in iface.objects() => #(self.generate_object(&obj)))
             #(for fut in iface.futures() => #(self.generate_future(&fut)))
             #(for fut in iface.streams() => #(self.generate_stream(&fut)))
+        }
         }
     }
 
@@ -269,7 +273,7 @@ impl RustGenerator {
             quote! {
                 #[repr(C)]
                 pub struct #name {
-                    #(for (i, var) in vars.iter().enumerate() => #(format!("ret{}", i)): #(self.ty(&var.ty)),)
+                    #(for (i, var) in vars.iter().enumerate() => #(format!("pub ret{}", i)): #(self.ty(&var.ty)),)
                 }
             }
         } else {
@@ -339,13 +343,13 @@ impl RustGenerator {
                 };
             },
             Instr::LiftRefObject(in_, out, object) => quote! {
-                let #(self.var(out)) = unsafe { &*(#(self.var(in_)) as *const #object) };
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut #object) };
             },
             Instr::LowerRefObject(in_, out) => quote! {
                 #(self.var(out)) = #(self.var(in_)) as *const _ as _;
             },
             Instr::LiftObject(in_, out, object) => quote! {
-                let #(self.var(out)): Box<#object> = unsafe { Box::from_raw(#(self.var(in_))) };
+                let #(self.var(out)) = unsafe { Box::from_raw(#(self.var(in_)) as *mut #object) };
             },
             Instr::LowerObject(in_, out) => quote! {
                 let #(self.var(in_))_0 = assert_send_static(#(self.var(in_)));
@@ -444,8 +448,8 @@ impl RustGenerator {
             AbiType::Vec(ty) => quote!(Vec<#(self.num_type(*ty))>),
             AbiType::Option(ty) => quote!(Option<#(self.ty(ty))>),
             AbiType::Result(ty) => quote!(Result<#(self.ty(ty))>),
+            AbiType::Object(ident) => quote!(#ident),
             AbiType::RefObject(_)
-            | AbiType::Object(_)
             | AbiType::RefFuture(_)
             | AbiType::Future(_)
             | AbiType::RefStream(_)
@@ -485,6 +489,7 @@ pub mod test_runner {
             #gen_tokens
             #api
             fn main() {
+                use api::*;
                 #test
             }
         };

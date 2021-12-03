@@ -34,13 +34,13 @@ compile_pass! {
     ),
     (
         final f = () {
-            final boxed = api.make_box();
+            final boxed = api.makeBox();
         };
         f();
         //boxed.drop();
-        //assert(api.was_dropped());
+        //assert(api.wasDropped());
         final largeList = [];
-        while (!api.was_dropped()) {
+        while (!api.wasDropped()) {
             //sleep(Duration(milliseconds: 10));
             largeList.add(99);
         }

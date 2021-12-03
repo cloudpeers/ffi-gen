@@ -39,8 +39,13 @@ impl FfiGen {
         WasmMultiValueShim::new().run(path, self.iface.clone())
     }
 
-    pub fn generate_dart<P: AsRef<Path>>(&self, path: P, cdylib: &str) -> Result<()> {
-        let dart = DartGenerator::new(cdylib.to_string());
+    pub fn generate_dart<P: AsRef<Path>>(
+        &self,
+        path: P,
+        library: &str,
+        cdylib: &str,
+    ) -> Result<()> {
+        let dart = DartGenerator::new(library.to_string(), cdylib.to_string());
         let dart = dart.generate(self.iface.clone()).to_file_string()?;
         std::fs::write(path.as_ref(), &dart)?;
         let status = Command::new("dart")

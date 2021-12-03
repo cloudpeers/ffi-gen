@@ -58,6 +58,7 @@ pub enum FunctionType {
 
 #[derive(Clone, Debug)]
 pub struct AbiFunction {
+    pub doc: Vec<String>,
     pub ty: FunctionType,
     pub name: String,
     pub args: Vec<(String, AbiType)>,
@@ -87,15 +88,10 @@ impl AbiFunction {
 
 #[derive(Clone, Debug)]
 pub struct AbiObject {
+    pub doc: Vec<String>,
     pub name: String,
     pub methods: Vec<AbiFunction>,
     pub destructor: String,
-}
-
-#[derive(Clone, Debug)]
-pub struct AbiStruct {
-    pub name: String,
-    pub fields: Vec<(String, AbiType)>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,6 +104,7 @@ impl AbiFuture {
     pub fn poll(&self) -> AbiFunction {
         AbiFunction {
             ty: FunctionType::PollFuture(self.symbol.clone(), self.ty.clone()),
+            doc: vec![],
             name: "poll".to_string(),
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),
@@ -128,6 +125,7 @@ impl AbiStream {
     pub fn poll(&self) -> AbiFunction {
         AbiFunction {
             ty: FunctionType::PollStream(self.symbol.clone(), self.ty.clone()),
+            doc: vec![],
             name: "poll".to_string(),
             args: vec![
                 ("post_cobject".to_string(), AbiType::Isize),
@@ -226,14 +224,14 @@ impl Interface {
             let mut methods = vec![];
             for method in &object.methods {
                 let obj = object.ident.clone();
-                let ty = if method.is_static {
-                    FunctionType::Constructor(obj)
-                } else {
-                    FunctionType::Method(obj)
-                };
                 let func = AbiFunction {
-                    ty,
+                    doc: method.doc.clone(),
                     name: method.ident.clone(),
+                    ty: if method.is_static {
+                        FunctionType::Constructor(obj)
+                    } else {
+                        FunctionType::Method(obj)
+                    },
                     args: method
                         .args
                         .iter()
@@ -244,6 +242,7 @@ impl Interface {
                 methods.push(func);
             }
             objs.push(AbiObject {
+                doc: object.doc.clone(),
                 name: object.ident.clone(),
                 methods,
                 destructor: format!("drop_box_{}", &object.ident),
@@ -256,7 +255,6 @@ impl Interface {
         let mut funcs = vec![];
         for func in &self.functions {
             assert!(!func.is_static);
-            let name = func.ident.clone();
             let args = func
                 .args
                 .iter()
@@ -264,8 +262,9 @@ impl Interface {
                 .collect();
             let ret = func.ret.as_ref().map(|ty| self.to_type(ty));
             let func = AbiFunction {
+                doc: func.doc.clone(),
+                name: func.ident.clone(),
                 ty: FunctionType::Function,
-                name,
                 args,
                 ret,
             };

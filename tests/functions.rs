@@ -5,7 +5,7 @@ compile_pass! {
     "fn hello_world();",
     ( pub fn hello_world() {} ),
     ( __hello_world(); ),
-    ( api.hello_world(); ),
+    ( api.helloWorld(); ),
     ( api.hello_world(); ),
     (
     export class Api {
@@ -29,7 +29,7 @@ compile_pass! {
         }
     ),
     ( assert_eq!(__hello_world(), 42); ),
-    ( assert(api.hello_world() == 42); ),
+    ( assert(api.helloWorld() == 42); ),
     ( assert.equal(api.hello_world(), 42); ),
     (
     export class Api {
@@ -53,7 +53,7 @@ compile_pass! {
         }
     ),
     ( assert_eq!(__hello_world(42), 42); ),
-    ( assert(api.hello_world(42) == 42); ),
+    ( assert(api.helloWorld(42) == 42); ),
     ( assert.equal(api.hello_world(42), 42); ),
     (
     export class Api {
@@ -76,7 +76,7 @@ compile_pass! {
         }
     ),
     ( assert_eq!(__hello_world(1), 1); ),
-    ( assert(api.hello_world(true) == true); ),
+    ( assert(api.helloWorld(true) == true); ),
     ( assert.strictEqual(api.hello_world(true), true); ),
     (
     export class Api {
@@ -99,7 +99,7 @@ compile_pass! {
         }
     ),
     ( assert_eq!(__hello_world(42), 42); ),
-    ( assert(api.hello_world(42) == 42); ),
+    ( assert(api.helloWorld(42) == 42); ),
     ( assert.equal(api.hello_world(42), 42); ),
     (
     export class Api {
@@ -123,7 +123,7 @@ compile_pass! {
         }
     ),
     ( assert_eq!(__hello_world(42.24), 42.24); ),
-    ( assert(api.hello_world(42.24) == 42.24); ),
+    ( assert(api.helloWorld(42.24) == 42.24); ),
     ( assert.equal(api.hello_world(42.24), 42.24); ),
     (
     export class Api {
@@ -180,6 +180,7 @@ compile_pass! {
         }
     ),
     (
+        use core::mem::ManuallyDrop;
         let s = ManuallyDrop::new("hello world".to_string());
         assert_eq!(__strlen(s.as_ptr() as _, s.len() as _, s.capacity() as _), 11);
     ),
@@ -210,7 +211,7 @@ compile_pass! {
         let s = unsafe { String::from_raw_parts(ret.ret0 as _, ret.ret1 as _, ret.ret2 as _) };
         assert_eq!(s.as_str(), "hello world");
     ),
-    ( assert(api.make_string() == "hello world"); ),
+    ( assert(api.makeString() == "hello world"); ),
     ( assert.equal(api.make_string(), "hello world"); ),
     (
     export class Api {
@@ -239,7 +240,7 @@ compile_pass! {
         let s2 = unsafe { std::str::from_utf8_unchecked(slice) };
         assert_eq!(s, s2);
     ),
-    ( assert(api.as_str("hello world") == "hello world"); ),
+    ( assert(api.asStr("hello world") == "hello world"); ),
     ( assert.equal(api.as_str("hello world"), "hello world"); ),
     (
     export class Api {
@@ -265,8 +266,8 @@ compile_pass! {
     ),
     ( ),
     (
-        assert(api.to_vec([]).equals([]));
-        assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
+        assert(api.toVec([]).equals([]));
+        assert(api.toVec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
         assert.deepEqual(api.to_vec([]), []);
@@ -295,8 +296,8 @@ compile_pass! {
     ),
     ( ),
     (
-        assert(api.to_vec([]).equals([]));
-        assert(api.to_vec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
+        assert(api.toVec([]).equals([]));
+        assert(api.toVec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
         assert.deepEqual(api.to_vec([]), []);
@@ -328,8 +329,8 @@ compile_pass! {
     ),
     ( ),
     (
-        assert(api.non_zero(0) == null);
-        assert(api.non_zero(42)! == 42);
+        assert(api.nonZero(0) == null);
+        assert(api.nonZero(42)! == 42);
     ),
     (
         assert.equal(api.non_zero(0n), null);
@@ -352,11 +353,11 @@ compile_pass! {
     ),
     ( ),
     (
-        assert(api.non_zero(42) == 42);
+        assert(api.nonZero(42) == 42);
 
         var err = false;
         try {
-            api.non_zero(0);
+            api.nonZero(0);
         } catch(e) {
             err = true;
             assert(e == "is zero");
