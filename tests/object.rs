@@ -6,7 +6,7 @@ compile_pass! {
     fn create(value: u32) -> CustomType;
     fn was_dropped() -> bool;
     object CustomType {
-        static fn new_(value: u32) -> CustomType;
+        static fn create(value: u32) -> CustomType;
         fn do_something() -> u32;
     }
     "#,
@@ -16,7 +16,7 @@ compile_pass! {
         static WAS_DROPPED: AtomicBool = AtomicBool::new(false);
 
         pub fn create(value: u32) -> CustomType {
-            CustomType::new_(value)
+            CustomType::create(value)
         }
 
         pub struct CustomType {
@@ -30,7 +30,7 @@ compile_pass! {
         }
 
         impl CustomType {
-            pub fn new_(value: u32) -> Self {
+            pub fn create(value: u32) -> Self {
                 Self { value }
             }
 
@@ -44,7 +44,7 @@ compile_pass! {
         }
     ),
     (
-        let boxed = __CustomType_new_(42);
+        let boxed = __CustomType_create(42);
         assert_eq!(__CustomType_do_something(boxed), 42);
         drop_box_CustomType(0 as _, boxed);
         assert!(was_dropped());
@@ -55,15 +55,15 @@ compile_pass! {
         assert!(was_dropped());
     ),
     (
-        final boxed = CustomType.new_(api, 42);
-        assert(boxed.do_something() == 42);
+        final boxed = CustomType.create(api, 42);
+        assert(boxed.doSomething() == 42);
         boxed.drop();
-        assert(api.was_dropped());
+        assert(api.wasDropped());
 
         final obj = api.create(42);
-        assert(obj.do_something() == 42);
+        assert(obj.doSomething() == 42);
         obj.drop();
-        assert(api.was_dropped());
+        assert(api.wasDropped());
     ),
     (
         const boxed = CustomType.new_(api, 42);
