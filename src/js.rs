@@ -667,6 +667,8 @@ pub mod test_runner {
                     .arg("cdylib")
                     .arg("-o")
                     .arg(#(quoted(library_file.as_ref().to_str().unwrap())))
+                    .arg("--cfg")
+                    .arg("feature=\"test_runner\"")
                     .arg("--target")
                     .arg("wasm32-unknown-unknown")
                     .arg(#(quoted(rust_file.as_ref().to_str().unwrap())))

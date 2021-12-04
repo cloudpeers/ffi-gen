@@ -590,6 +590,8 @@ pub mod test_runner {
                     .arg("compile_pass")
                     .arg("--crate-type")
                     .arg("cdylib")
+                    .arg("--cfg")
+                    .arg("feature=\"test_runner\"")
                     .arg("-o")
                     .arg(#(quoted(library_file.as_path().to_str().unwrap())))
                     .arg(#(quoted(rust_file.as_ref().to_str().unwrap())))

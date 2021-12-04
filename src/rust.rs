@@ -133,12 +133,14 @@ impl RustGenerator {
                 }
             }
 
+            #[cfg(feature = "test_runner")]
             pub trait Stream {
                 type Item;
 
                 fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>>;
             }
 
+            #[cfg(feature = "test_runner")]
             impl<T> Stream for Pin<T>
             where
                 T: core::ops::DerefMut + Unpin,
@@ -150,15 +152,6 @@ impl RustGenerator {
                     self.get_mut().as_mut().poll_next(cx)
                 }
             }
-
-            /*#[cfg(feature = "futures")]
-            impl<T: futures::Stream> Stream for T {
-                type Item = T::Item;
-
-                fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-                    futures::Stream::poll_next(self, cx)
-                }
-            }*/
 
             #[repr(transparent)]
             pub struct FfiStream<T: Send + 'static>(Pin<Box<dyn Stream<Item = T> + Send + 'static>>);
