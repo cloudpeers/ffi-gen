@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 ffi_gen_macro::ffi_gen!("example/api.rsh");
 
 #[cfg(target_family = "wasm")]
@@ -14,4 +16,9 @@ fn log(msg: &str) {
 
 pub fn hello_world() {
     log("hello world");
+}
+
+pub async fn async_hello_world() -> Result<u8> {
+    log("hello world");
+    Ok(0)
 }

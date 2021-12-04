@@ -75,7 +75,7 @@ impl TsGenerator {
                 AbiType::Option(_) => todo!(),
                 AbiType::Result(_) => todo!(),
                 AbiType::RefFuture(_) => todo!(),
-                AbiType::Future(_) => todo!(),
+                AbiType::Future(_) => quote!(Promise),
                 AbiType::RefStream(_) => todo!(),
                 AbiType::Stream(_) => todo!(),
             }

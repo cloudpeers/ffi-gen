@@ -186,6 +186,55 @@ class Api {
     this.instance.exports.__hello_world();
     return;
   }
+  async_hello_world() {
+    const tmp0 = this.instance.exports.__async_hello_world();
+    const tmp2 = tmp0;
+    const tmp2_0 = () => {
+      this.drop("__async_hello_world_future_drop", tmp2);
+    };
+    const tmp2_1 = new Box(tmp2, tmp2_0);
+    const tmp1 = nativeFuture(tmp2_1, (a, b, c) => {
+      return this.__async_hello_world_future_poll(a, b, c);
+    });
+    return tmp1;
+  }
+  __async_hello_world_future_poll(boxed, post_cobject, port) {
+    const tmp0 = boxed;
+    const tmp1 = tmp0;
+    const tmp2 = post_cobject;
+    const tmp3 = tmp2;
+    const tmp4 = port;
+    const tmp5 = tmp4;
+    const tmp6 = this.instance.exports.__async_hello_world_future_poll(
+      tmp1,
+      tmp3,
+      tmp5
+    );
+    const tmp8 = tmp6[0];
+    const tmp9 = tmp6[1];
+    const tmp10 = tmp6[2];
+    const tmp11 = tmp6[3];
+    const tmp12 = tmp6[4];
+    const tmp13 = tmp6[5];
+    if (tmp8 === 0) {
+      return null;
+    }
+    if (tmp9 === 0) {
+      const tmp9_0 = new Uint8Array(
+        this.instance.exports.memory.buffer,
+        tmp10,
+        tmp11
+      );
+      const tmp9_1 = new TextDecoder();
+      const tmp9_2 = tmp9_1.decode(tmp9_0);
+      if (tmp11 > 0) {
+        this.deallocate(tmp10, tmp12, 1);
+      }
+      throw tmp9_2;
+    }
+    const tmp7 = tmp13;
+    return tmp7;
+  }
 }
 
 module.exports = {

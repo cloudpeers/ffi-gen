@@ -363,7 +363,7 @@ impl RustGenerator {
             },
             Instr::LowerFuture(in_, out, ty) => {
                 let future = if let AbiType::Result(_) = ty {
-                    quote!(async move { Ok(#(self.var(in_)).await.map_err(|err| err.to_string())?) })
+                    quote!(async move { #(self.var(in_)).await.map_err(|err| err.to_string()) })
                 } else {
                     quote!(#(self.var(in_)))
                 };

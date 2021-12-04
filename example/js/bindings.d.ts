@@ -5,5 +5,7 @@ export class Api {
 
   hello_world: void;
 
+  async_hello_world: Promise;
+
   drop(): void;
 }
