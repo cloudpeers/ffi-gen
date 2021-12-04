@@ -282,16 +282,17 @@ impl DartGenerator {
         } else {
             quote!(void)
         };
+        let doc = self.generate_doc(&func.doc);
         match &func.ty {
             FunctionType::Constructor(_object) => quote! {
-                #(self.generate_doc(&func.doc))
+                #doc
                 static #ret #name(Api api, #args) {
                     #body
                 }
             },
             _ => {
                 quote! {
-                    #(self.generate_doc(&func.doc))
+                    #doc
                     #ret #name(#(boxed)#args) {
                         #body
                     }
@@ -516,7 +517,7 @@ impl DartGenerator {
     }
 
     fn generate_doc(&self, doc: &[String]) -> dart::Tokens {
-        quote!(#(for line in doc => #(static_literal("///")) #line #<line>))
+        quote!(#(for line in doc => #(static_literal("///")) #line #<push>))
     }
 
     fn type_ident(&self, s: &str) -> String {

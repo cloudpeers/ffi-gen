@@ -198,10 +198,21 @@ class Api {
   }
 
   /// Prints a friendly greeting to stdout.
-
   void helloWorld() {
     _helloWorld();
     return;
+  }
+
+  /// Returns a future that prints a friendly
+  /// greeting to stdout.
+  Future asyncHelloWorld() {
+    final tmp0 = _asyncHelloWorld();
+    final tmp2 = tmp0;
+    final ffi.Pointer<ffi.Void> tmp2_0 = ffi.Pointer.fromAddress(tmp2);
+    final tmp2_1 = _Box(this, tmp2_0, "__async_hello_world_future_drop");
+    tmp2_1._finalizer = _registerFinalizer(tmp2_1);
+    final tmp1 = _nativeFuture(tmp2_1, this.__asyncHelloWorldFuturePoll);
+    return tmp1;
   }
 
   late final _allocatePtr = _lookup<
@@ -219,8 +230,82 @@ class Api {
   late final _deallocate = _deallocatePtr
       .asFunction<void Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
+  int? __asyncHelloWorldFuturePoll(
+    int boxed,
+    int postCobject,
+    int port,
+  ) {
+    final tmp0 = boxed;
+    final tmp1 = tmp0;
+    final tmp2 = postCobject;
+    final tmp3 = tmp2;
+    final tmp4 = port;
+    final tmp5 = tmp4;
+    final tmp6 = _asyncHelloWorldFuturePoll(
+      tmp1,
+      tmp3,
+      tmp5,
+    );
+    final tmp8 = tmp6.arg0;
+    final tmp9 = tmp6.arg1;
+    final tmp10 = tmp6.arg2;
+    final tmp11 = tmp6.arg3;
+    final tmp12 = tmp6.arg4;
+    final tmp13 = tmp6.arg5;
+    if (tmp8 == 0) {
+      return null;
+    }
+    if (tmp9 == 0) {
+      final ffi.Pointer<ffi.Uint8> tmp10_0 = ffi.Pointer.fromAddress(tmp10);
+      final tmp9_0 = utf8.decode(tmp10_0.asTypedList(tmp11));
+      if (tmp11 > 0) {
+        final ffi.Pointer<ffi.Void> tmp10_0;
+        tmp10_0 = ffi.Pointer.fromAddress(tmp10);
+        this.__deallocate(tmp10_0, tmp12, 1);
+      }
+      throw tmp9_0;
+    }
+    final tmp7 = tmp13;
+    return tmp7;
+  }
+
   late final _helloWorldPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function()>>("__hello_world");
 
   late final _helloWorld = _helloWorldPtr.asFunction<void Function()>();
+  late final _asyncHelloWorldPtr =
+      _lookup<ffi.NativeFunction<ffi.Int64 Function()>>("__async_hello_world");
+
+  late final _asyncHelloWorld =
+      _asyncHelloWorldPtr.asFunction<int Function()>();
+  late final _asyncHelloWorldFuturePollPtr = _lookup<
+      ffi.NativeFunction<
+          _AsyncHelloWorldFuturePollReturn Function(
+    ffi.Int64,
+    ffi.Int64,
+    ffi.Int64,
+  )>>("__async_hello_world_future_poll");
+
+  late final _asyncHelloWorldFuturePoll =
+      _asyncHelloWorldFuturePollPtr.asFunction<
+          _AsyncHelloWorldFuturePollReturn Function(
+    int,
+    int,
+    int,
+  )>();
+}
+
+class _AsyncHelloWorldFuturePollReturn extends ffi.Struct {
+  @ffi.Uint8()
+  external int arg0;
+  @ffi.Uint8()
+  external int arg1;
+  @ffi.Int64()
+  external int arg2;
+  @ffi.Uint64()
+  external int arg3;
+  @ffi.Uint64()
+  external int arg4;
+  @ffi.Uint8()
+  external int arg5;
 }
