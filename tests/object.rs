@@ -67,14 +67,14 @@ compile_pass! {
     ),
     (
         const boxed = CustomType.create(api, 42);
-        assert.equal(boxed.do_something(), 42);
+        assert.equal(boxed.doSomething(), 42);
         boxed.drop();
-        assert.equal(api.was_dropped(), true);
+        assert.equal(api.wasDropped(), true);
 
         const obj = api.create(42);
-        assert.equal(obj.do_something(), 42);
+        assert.equal(obj.doSomething(), 42);
         obj.drop();
-        assert.equal(api.was_dropped(), true);
+        assert.equal(api.wasDropped(), true);
     ),
     (
     export class Api {

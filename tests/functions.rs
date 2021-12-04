@@ -6,7 +6,7 @@ compile_pass! {
     ( pub fn hello_world() {} ),
     ( __hello_world(); ),
     ( api.helloWorld(); ),
-    ( api.hello_world(); ),
+    ( api.helloWorld(); ),
     (
     export class Api {
         constructor();
@@ -30,7 +30,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(), 42); ),
     ( assert(api.helloWorld() == 42); ),
-    ( assert.equal(api.hello_world(), 42); ),
+    ( assert.equal(api.helloWorld(), 42); ),
     (
     export class Api {
         constructor();
@@ -54,7 +54,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(42), 42); ),
     ( assert(api.helloWorld(42) == 42); ),
-    ( assert.equal(api.hello_world(42), 42); ),
+    ( assert.equal(api.helloWorld(42), 42); ),
     (
     export class Api {
         constructor();
@@ -77,7 +77,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(1), 1); ),
     ( assert(api.helloWorld(true) == true); ),
-    ( assert.strictEqual(api.hello_world(true), true); ),
+    ( assert.strictEqual(api.helloWorld(true), true); ),
     (
     export class Api {
         constructor();
@@ -100,7 +100,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(42), 42); ),
     ( assert(api.helloWorld(42) == 42); ),
-    ( assert.equal(api.hello_world(42), 42); ),
+    ( assert.equal(api.helloWorld(42), 42); ),
     (
     export class Api {
         constructor();
@@ -124,7 +124,7 @@ compile_pass! {
     ),
     ( assert_eq!(__hello_world(42.24), 42.24); ),
     ( assert(api.helloWorld(42.24) == 42.24); ),
-    ( assert.equal(api.hello_world(42.24), 42.24); ),
+    ( assert.equal(api.helloWorld(42.24), 42.24); ),
     (
     export class Api {
         constructor();
@@ -212,7 +212,7 @@ compile_pass! {
         assert_eq!(s.as_str(), "hello world");
     ),
     ( assert(api.makeString() == "hello world"); ),
-    ( assert.equal(api.make_string(), "hello world"); ),
+    ( assert.equal(api.makeString(), "hello world"); ),
     (
     export class Api {
         constructor();
@@ -241,7 +241,7 @@ compile_pass! {
         assert_eq!(s, s2);
     ),
     ( assert(api.asStr("hello world") == "hello world"); ),
-    ( assert.equal(api.as_str("hello world"), "hello world"); ),
+    ( assert.equal(api.asStr("hello world"), "hello world"); ),
     (
     export class Api {
         constructor();
@@ -270,8 +270,8 @@ compile_pass! {
         assert(api.toVec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
-        assert.deepEqual(api.to_vec([]), []);
-        assert.deepEqual(api.to_vec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
+        assert.deepEqual(api.toVec([]), []);
+        assert.deepEqual(api.toVec([0, 1, 2, 3, 4]), [0, 1, 2, 3, 4]);
     ),
     (
     export class Api {
@@ -300,8 +300,8 @@ compile_pass! {
         assert(api.toVec([0, 1, 2, 3, 4]).equals([0, 1, 2, 3, 4]));
     ),
     (
-        assert.deepEqual(api.to_vec([]), []);
-        assert.deepEqual(api.to_vec([0n, 1n, 2n, 3n, 4n]), [0n, 1n, 2n, 3n, 4n]);
+        assert.deepEqual(api.toVec([]), []);
+        assert.deepEqual(api.toVec([0n, 1n, 2n, 3n, 4n]), [0n, 1n, 2n, 3n, 4n]);
     ),
     (
     export class Api {
@@ -333,8 +333,8 @@ compile_pass! {
         assert(api.nonZero(42)! == 42);
     ),
     (
-        assert.equal(api.non_zero(0n), null);
-        assert.equal(api.non_zero(42n), 42);
+        assert.equal(api.nonZero(0n), null);
+        assert.equal(api.nonZero(42n), 42);
     ),
     ( )
 }
@@ -365,11 +365,11 @@ compile_pass! {
         assert(err);
     ),
     (
-        assert.equal(api.non_zero(42n), 42);
+        assert.equal(api.nonZero(42n), 42);
 
         let err = false;
         try {
-            api.non_zero(0n);
+            api.nonZero(0n);
         } catch(e) {
             err = true;
             assert.equal(e, "is zero");
@@ -462,37 +462,37 @@ compile_pass! {
         assert(api.u32Identity(x) == x);
     ),
     (
-        let x = api.u64_min();
+        let x = api.u64Min();
         assert.equal(x, 0n);
-        assert.equal(api.u64_identity(x), x);
+        assert.equal(api.u64Identity(x), x);
 
-        x = api.u64_max();
+        x = api.u64Max();
         assert.equal(x, 0xffff_ffff_ffff_ffffn);
-        assert.equal(api.u64_identity(x), x);
+        assert.equal(api.u64Identity(x), x);
 
-        x = api.i64_min();
+        x = api.i64Min();
         assert.equal(x, -9223372036854775808n);
-        assert.equal(api.i64_identity(x), x);
+        assert.equal(api.i64Identity(x), x);
 
-        x = api.i64_max();
+        x = api.i64Max();
         assert.equal(x, 9223372036854775807n);
-        assert.equal(api.i64_identity(x), x);
+        assert.equal(api.i64Identity(x), x);
 
-        x = api.i32_min();
+        x = api.i32Min();
         assert.equal(x, -2147483648);
-        assert.equal(api.i32_identity(x), x);
+        assert.equal(api.i32Identity(x), x);
 
-        x = api.i32_max();
+        x = api.i32Max();
         assert.equal(x, 2147483647);
-        assert.equal(api.i32_identity(x), x);
+        assert.equal(api.i32Identity(x), x);
 
-        x = api.u32_min();
+        x = api.u32Min();
         assert.equal(x, 0n);
-        assert.equal(api.u32_identity(x), x);
+        assert.equal(api.u32Identity(x), x);
 
-        x = api.u32_max();
+        x = api.u32Max();
         assert.equal(x, 0xffff_ffff);
-        assert.equal(api.u32_identity(x), x);
+        assert.equal(api.u32Identity(x), x);
     ),
     ()
 }
