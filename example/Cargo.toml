@@ -12,3 +12,4 @@ ffi-gen = { version = "0.1.0", path = ".." }
 [dependencies]
 anyhow = "1.0.51"
 ffi-gen-macro = { version = "0.1.0", path = "../macro" }
+futures = "0.3.18"

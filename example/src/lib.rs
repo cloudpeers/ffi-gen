@@ -1,4 +1,5 @@
 use anyhow::Result;
+use futures::Stream;
 
 ffi_gen_macro::ffi_gen!("example/api.rsh");
 
