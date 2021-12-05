@@ -180,6 +180,7 @@ pub enum Type {
     Result(Box<Type>),
     Future(Box<Type>),
     Stream(Box<Type>),
+    Tuple(Vec<Type>),
 }
 
 impl Type {
@@ -229,6 +230,13 @@ impl Type {
                     'S' => Type::Stream(inner),
                     _ => unreachable!(),
                 }
+            }
+            Rule::tuple => {
+                let mut tuple = vec![];
+                for pair in pair.into_inner() {
+                    tuple.push(Self::parse(pair)?);
+                }
+                Type::Tuple(tuple)
             }
             r => unreachable!("{:?}", r),
         })
@@ -396,6 +404,52 @@ mod tests {
                     ]
                 }],
                 idents: vec!["Greeter".to_string()].into_iter().collect(),
+            }
+        );
+        let res = Interface::parse(
+            r#"
+            fn tuple0() -> ();
+            fn tuple1() -> (u8,);
+            fn tuple2() -> (u8, u8);
+            fn tuple3() -> (u8, u8, u8,);
+            "#,
+        )?;
+        assert_eq!(
+            res,
+            Interface {
+                doc: Default::default(),
+                functions: vec![
+                    Function {
+                        doc: Default::default(),
+                        is_static: false,
+                        ident: "tuple0".to_string(),
+                        args: vec![],
+                        ret: Some(Type::Tuple(vec![])),
+                    },
+                    Function {
+                        doc: Default::default(),
+                        is_static: false,
+                        ident: "tuple1".to_string(),
+                        args: vec![],
+                        ret: Some(Type::Tuple(vec![Type::U8])),
+                    },
+                    Function {
+                        doc: Default::default(),
+                        is_static: false,
+                        ident: "tuple2".to_string(),
+                        args: vec![],
+                        ret: Some(Type::Tuple(vec![Type::U8, Type::U8])),
+                    },
+                    Function {
+                        doc: Default::default(),
+                        is_static: false,
+                        ident: "tuple3".to_string(),
+                        args: vec![],
+                        ret: Some(Type::Tuple(vec![Type::U8, Type::U8, Type::U8])),
+                    }
+                ],
+                objects: Default::default(),
+                idents: Default::default(),
             }
         );
         Ok(())

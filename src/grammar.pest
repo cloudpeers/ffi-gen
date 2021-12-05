@@ -5,6 +5,7 @@ primitive = {
     "i8" | "i16" | "i32" | "i64" | "isize" |
     "bool" | "f32" | "f64" | "string"
 }
+tuple = { "(" ~ (type_ ~ ("," ~ type_)*)? ~ ","? ~ ")" }
 ref_ = { "&" ~ type_ }
 slice = { "[" ~ type_ ~ "]" }
 vec = { "Vec" ~ "<" ~ type_ ~ ">" }
@@ -12,7 +13,7 @@ opt = { "Option" ~ "<" ~ type_ ~ ">" }
 res = { "Result" ~ "<" ~ type_ ~ ">" }
 fut = { "Future" ~ "<" ~ type_ ~ ">" }
 stream = { "Stream" ~ "<" ~ type_ ~ ">" }
-type_ = { primitive | ref_ | slice | vec | opt | res | fut | stream | ident }
+type_ = { primitive | tuple | ref_ | slice | vec | opt | res | fut | stream | ident }
 
 doc = @{ (!"\n" ~ ANY)* ~ "\n" }
 module_docs = @{ "//!" ~ doc }
