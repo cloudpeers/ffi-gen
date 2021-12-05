@@ -129,6 +129,13 @@ impl TsGenerator {
                     let inner = self.generate_return_type(Some(i));
                     quote!(ReadableStream<#inner>)
                 }
+                AbiType::Tuple(tys) => {
+                    match tys.len() {
+                        0 => quote!(void),
+                        1 => self.generate_return_type(Some(tys[0])),
+                        _ => quote!([#(for ty in tys => self.generate_return_type(Some(ty))),]),
+                    }
+                }
             }
         } else {
             quote!(void)

@@ -117,6 +117,7 @@ impl Abi {
             }
             AbiType::Option(_ty) => todo!(),
             AbiType::Result(_ty) => todo!(),
+            AbiType::Tuple(_ty) => todo!(),
         }
     }
 
@@ -234,6 +235,7 @@ impl Abi {
                 let destructor = format!("{}_stream_drop", symbol);
                 import.push(Instr::LiftStream(ptr, poll, destructor, out));
             }
+            AbiType::Tuple(_ty) => todo!(),
         }
     }
 

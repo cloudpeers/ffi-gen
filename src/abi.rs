@@ -35,6 +35,7 @@ pub enum AbiType {
     Future(Box<AbiType>),
     RefStream(Box<AbiType>),
     Stream(Box<AbiType>),
+    Tuple(Vec<AbiType>),
 }
 
 impl AbiType {
@@ -382,6 +383,7 @@ impl Interface {
             Type::Result(ty) => AbiType::Result(Box::new(self.to_type(ty))),
             Type::Future(ty) => AbiType::Future(Box::new(self.to_type(ty))),
             Type::Stream(ty) => AbiType::Stream(Box::new(self.to_type(ty))),
+            Type::Tuple(ty) => AbiType::Tuple(ty.iter().map(|ty| self.to_type(ty)).collect()),
             ty => unimplemented!("{:?}", ty),
         }
     }

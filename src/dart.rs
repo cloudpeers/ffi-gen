@@ -449,13 +449,16 @@ impl DartGenerator {
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_wrapped_num_type(*ty))>)
             }
-            AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty),
             AbiType::Option(ty) => quote!(#(self.generate_type(&**ty))?),
             AbiType::Result(ty) => self.generate_type(&**ty),
-            AbiType::RefFuture(_) => todo!(),
-            AbiType::Future(_) => quote!(Future),
-            AbiType::RefStream(_) => todo!(),
-            AbiType::Stream(_) => quote!(Stream),
+            AbiType::Tuple(tuple) => match tuple.len() {
+                0 => quote!(void),
+                1 => quote!(self.generate_type(tuple[0])),
+                _ => todo!(),
+            },
+            AbiType::RefObject(ty) | AbiType::Object(ty) => quote!(#ty),
+            AbiType::RefFuture(_) | AbiType::Future(_) => quote!(Future),
+            AbiType::RefStream(_) | AbiType::Stream(_) => quote!(Stream),
         }
     }
 

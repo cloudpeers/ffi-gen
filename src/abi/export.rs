@@ -91,6 +91,7 @@ impl Abi {
             }
             AbiType::Future(_) => todo!(),
             AbiType::Stream(_) => todo!(),
+            AbiType::Tuple(_) => todo!(),
         }
     }
 
@@ -210,6 +211,7 @@ impl Abi {
                 let ty = (&**ty).clone();
                 exports.push(Instr::LowerStream(ret, ptr, ty));
             }
+            AbiType::Tuple(_) => todo!(),
         }
     }
 
