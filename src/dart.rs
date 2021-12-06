@@ -116,6 +116,8 @@ impl DartGenerator {
                 Iterator<T> get iterator => this;
 
                 T? _current;
+
+                @override
                 T get current => _current!;
 
                 @override
@@ -336,13 +338,13 @@ impl DartGenerator {
             | Instr::BorrowIter(in_, out)
             | Instr::BorrowFuture(in_, out)
             | Instr::BorrowStream(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_))._box.borrow();)
+                quote!(#(self.var(out)) = #(self.var(in_))._box.borrow();)
             }
             Instr::MoveObject(in_, out)
             | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_))._box.move();)
+                quote!(#(self.var(out)) = #(self.var(in_))._box.move();)
             }
             Instr::LiftObject(obj, box_, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
