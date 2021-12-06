@@ -118,7 +118,10 @@ impl TsGenerator {
                     quote!(#inner?)
                 }
                 AbiType::Result(i) => quote!(#(self.generate_return_type(Some(i)))),
-                AbiType::RefIter(_) | AbiType::Iter(_) => todo!(),
+                AbiType::RefIter(i) | AbiType::Iter(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(Iterator<#inner>)
+                }
                 AbiType::RefFuture(i) | AbiType::Future(i) => {
                     let inner = self.generate_return_type(Some(i));
                     quote!(Promise<#inner>)
@@ -419,7 +422,7 @@ impl JsGenerator {
 
     fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(const #(self.var(out)) = this.box.borrow();),
+            Instr::BorrowSelf(out) => quote!(#(self.var(out)) = this.box.borrow();),
             Instr::BorrowObject(in_, out)
             | Instr::BorrowIter(in_, out)
             | Instr::BorrowFuture(in_, out)

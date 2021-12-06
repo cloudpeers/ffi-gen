@@ -89,6 +89,34 @@ class _Box {
   }
 }
 
+class Iter<T> extends Iterable<T> implements Iterator<T> {
+  final _Box _box;
+  final T? Function(int) _next;
+
+  Iter._(this._box, this._next);
+
+  @override
+  Iterator<T> get iterator => this;
+
+  T? _current;
+  T get current => _current!;
+
+  @override
+  bool moveNext() {
+    final next = _next(_box.borrow());
+    if (next == null) {
+      return false;
+    } else {
+      _current = next;
+      return true;
+    }
+  }
+
+  void drop() {
+    _box.drop();
+  }
+}
+
 Future<T> _nativeFuture<T>(_Box box, T? Function(int, int, int) nativePoll) {
   final completer = Completer<T>();
   final rx = ReceivePort();
@@ -205,7 +233,7 @@ class Api {
 
   /// Returns a future that prints a friendly
   /// greeting to stdout.
-  Future asyncHelloWorld() {
+  Future<int> asyncHelloWorld() {
     final tmp0 = _asyncHelloWorld();
     final tmp2 = tmp0;
     final ffi.Pointer<ffi.Void> tmp2_0 = ffi.Pointer.fromAddress(tmp2);
@@ -236,11 +264,14 @@ class Api {
     int port,
   ) {
     final tmp0 = boxed;
-    final tmp1 = tmp0;
     final tmp2 = postCobject;
-    final tmp3 = tmp2;
     final tmp4 = port;
-    final tmp5 = tmp4;
+    var tmp1 = 0;
+    var tmp3 = 0;
+    var tmp5 = 0;
+    tmp1 = tmp0;
+    tmp3 = tmp2;
+    tmp5 = tmp4;
     final tmp6 = _asyncHelloWorldFuturePoll(
       tmp1,
       tmp3,
