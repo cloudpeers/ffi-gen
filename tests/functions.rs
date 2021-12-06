@@ -14,8 +14,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(): void;
-
-        drop(): void;
     })
 
 }
@@ -38,8 +36,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(): number;
-
-        drop(): void;
     })
 
 }
@@ -62,8 +58,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 }
 
@@ -85,8 +79,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: boolean): boolean;
-
-        drop(): void;
     })
 }
 
@@ -108,8 +100,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 
 }
@@ -132,8 +122,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 }
 
@@ -166,8 +154,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
-
-        drop(): void;
     })
 }
 
@@ -193,8 +179,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
-
-        drop(): void;
     })
 }
 
@@ -220,8 +204,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         makeString(): string;
-
-        drop(): void;
     })
 }
 
@@ -249,8 +231,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         asStr(s: string): string;
-
-        drop(): void;
     }
     )
 
@@ -280,8 +260,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         toVec(b: Array<number>): Array<number>;
-
-        drop(): void;
     })
 
 }
@@ -310,8 +288,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         toVec(b: Array<BigInt>): Array<BigInt>;
-
-        drop(): void;
     })
 }
 
@@ -343,8 +319,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         nonZero(num: BigInt): BigInt?;
-
-        drop(): void;
     })
 }
 
@@ -392,8 +366,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         nonZero(num: BigInt): BigInt;
-
-        drop(): void;
     })
 }
 
@@ -541,8 +513,6 @@ compile_pass! {
         u32Identity(v: number): number;
 
         u64Identity(v: BigInt): BigInt;
-
-        drop(): void;
     })
 }
 
@@ -592,13 +562,11 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        tuple0();
+        tuple0(): void;
 
-        tuple1(arg: number): number;
+        tuple1(arg0: number): number;
 
-        tuple2(arg: [number, number]): [number, number];
-
-        drop(): void;
+        tuple2(arg0: number, arg1: number): [number,number,];
     })
 }
 
@@ -632,6 +600,6 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        identity(arg: i32?): i32?;
+        identity(arg: number?): number?;
     })
 }

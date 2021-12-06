@@ -85,8 +85,6 @@ compile_pass! {
         create(value: number): CustomType;
 
         wasDropped(): boolean;
-
-        drop(): void;
     }
 
     export class CustomType {
@@ -187,8 +185,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(value: number): Promise<number>;
-
-        drop(): void;
     })
 }
 
@@ -265,8 +261,6 @@ compile_pass! {
         create(): Promise<BigInt>;
 
         wake(): void;
-
-        drop(): void;
     })
 }
 
@@ -341,8 +335,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(values: Array<number>): ReadableStream<number>;
-
-        drop(): void;
     })
 }
 
@@ -398,7 +390,5 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(value: number): Promise<number>;
-
-        drop(): void;
     })
 }

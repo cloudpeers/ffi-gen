@@ -64,9 +64,6 @@ impl TsGenerator {
               fetch(url, imports): Promise<void>;
 
               #(for func in iface.functions() join (#<line>#<line>) => #(self.generate_function(func)))
-
-              #(self.gen_doc(&["Drop the API"]))
-              drop(): void;
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -74,8 +71,9 @@ impl TsGenerator {
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
-        let ret = self.generate_return_type(func.ret.as_ref());
+        let ffi = Abi::Wasm32.import(&func);
+        let args = quote!(#(for (name, ty) in &ffi.abi_args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
+        let ret = self.generate_return_type(ffi.abi_ret.as_ref());
         let name = self.ident(&func.name);
         let fun = match &func.ty {
             FunctionType::Constructor(_) => {
