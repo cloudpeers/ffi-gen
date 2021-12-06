@@ -122,9 +122,10 @@ impl JsGenerator {
             // idea borrowed from:
             // https://github.com/dcodeIO/webassembly/blob/master/src/index.js#L223
             let fs;
-            function fetch_polyfill(file) {
+            const fetch_polyfill = async (file) => {
+              const readFile = await import("fs").then(({ readFile }) => readFile);
                 return new Promise((resolve, reject) => {
-                    (fs || (fs = eval("equire".replace(/^/, 'r'))("fs"))).readFile(
+                    readFile(
                         file,
                         function(err, data) {
                             return (err)
@@ -138,7 +139,14 @@ impl JsGenerator {
                 });
             }
 
-            const { ReadableStream } = (typeof window == "object" && { ReadableStream }) || require("node:stream/web");
+            let ReadableStream;
+            if (typeof window == "object") {
+                ReadableStream = window.ReadableStream;
+            } else {
+                import("node:stream/web").then(pkg => {
+                    ReadableStream = pkg.ReadableStream;
+                });
+            };
 
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
 
@@ -285,7 +293,7 @@ impl JsGenerator {
                 });
             };
 
-            class Api {
+            export class Api {
                 async fetch(url, imports) {
                     this.instance = await fetchAndInstantiate(url, imports);
                 }
@@ -309,16 +317,13 @@ impl JsGenerator {
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
 
-            module.exports = {
-                Api: Api,
-                #(for obj in iface.objects() => #(self.type_ident(&obj.name)): #(self.type_ident(&obj.name)),)
-            }
+            export default Api;
         }
     }
 
     fn generate_object(&self, obj: AbiObject) -> js::Tokens {
         quote! {
-            class #(self.type_ident(&obj.name)) {
+            export class #(self.type_ident(&obj.name)) {
                 constructor(api, box) {
                     this.api = api;
                     this.box = box;
@@ -628,7 +633,7 @@ pub mod test_runner {
         let mut rust_file = NamedTempFile::new()?;
         let rust_gen = RustGenerator::new(Abi::Wasm32);
         let rust_tokens = rust_gen.generate(iface.clone());
-        let mut js_file = NamedTempFile::new()?;
+        let mut js_file = tempfile::Builder::new().suffix(".mjs").tempfile()?;
         let js_gen = JsGenerator::default();
         let js_tokens = js_gen.generate(iface.clone());
 
@@ -652,10 +657,10 @@ pub mod test_runner {
 
         let library_file = NamedTempFile::new()?;
         let bin_tokens = quote! {
+            import assert from "assert";
             #js_tokens
 
             async function main() {
-                const assert = require("assert");
                 const api = new Api();
                 await api.fetch(#_(#(library_file.as_ref().to_str().unwrap()).multivalue.wasm), {
                     env: {
