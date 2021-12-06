@@ -357,16 +357,14 @@ impl DartGenerator {
                 final #(self.var(out)) = #obj._(#api, #(self.var(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #(self.ident(arg));),
-            Instr::BindRets(ret, vars) => {
-                match vars.len() {
-                    0 => quote!(),
-                    1 => quote!(final #(self.var(&vars[0])) = #(self.var(ret));),
-                    _ => quote! {
-                        #(for (idx, var) in vars.iter().enumerate() =>
-                            final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
-                    },
-                }
-            }
+            Instr::BindRets(ret, vars) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(final #(self.var(&vars[0])) = #(self.var(ret));),
+                _ => quote! {
+                    #(for (idx, var) in vars.iter().enumerate() =>
+                        final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
+                },
+            },
             Instr::LowerNum(in_, out, _num) => {
                 quote!(#(self.var(out)) = #(self.var(in_));)
             }
@@ -483,7 +481,7 @@ impl DartGenerator {
                         #(for var in vars => #(self.var(out)).add(#(self.var(var)));)
                     },
                 }
-            },
+            }
             Instr::LowerTuple(in_, vars) => {
                 match vars.len() {
                     0 => quote!(),
@@ -493,7 +491,7 @@ impl DartGenerator {
                         //#(for var in vars => #(self.var(out)).add(#(self.var(var)));)
                     },
                 }
-            },
+            }
             Instr::LiftNumFromU32Tuple(..) => unreachable!(),
         }
     }

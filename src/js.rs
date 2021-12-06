@@ -109,7 +109,6 @@ impl TsGenerator {
                 AbiType::Bool => quote!(boolean),
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
-                    // TODO String etcs
                     let inner = self.generate_return_type(Some(&AbiType::Num(*prim)));
                     quote!(Array<#inner>)
                 }

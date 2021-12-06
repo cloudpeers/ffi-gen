@@ -206,13 +206,13 @@ impl RustGenerator {
 
     fn generate_function(&self, func: &AbiFunction) -> rust::Tokens {
         let ffi = self.abi.export(func);
-        let args = quote!(#(for var in &ffi.args => #(self.var(var)): #(self.ty(&var.ty)),));
-        let ret = match &ffi.ret {
+        let args = quote!(#(for var in &ffi.ffi_args => #(self.var(var)): #(self.ty(&var.ty)),));
+        let ret = match &ffi.ffi_ret {
             Return::Void => quote!(),
             Return::Num(var) => quote!(-> #(self.ty(&var.ty))),
             Return::Struct(_, name) => quote!(-> #name),
         };
-        let return_ = match &ffi.ret {
+        let return_ = match &ffi.ffi_ret {
             Return::Void => quote!(),
             Return::Num(var) => self.var(var),
             Return::Struct(vars, name) => quote! {
@@ -221,7 +221,7 @@ impl RustGenerator {
                 }
             },
         };
-        let return_struct = if let Return::Struct(_, _) = &ffi.ret {
+        let return_struct = if let Return::Struct(_, _) = &ffi.ffi_ret {
             self.generate_return_struct(func)
         } else {
             quote!()
@@ -289,7 +289,7 @@ impl RustGenerator {
 
     fn generate_return_struct(&self, func: &AbiFunction) -> rust::Tokens {
         let ffi = self.abi.export(func);
-        if let Return::Struct(vars, name) = &ffi.ret {
+        if let Return::Struct(vars, name) = &ffi.ffi_ret {
             quote! {
                 #[repr(C)]
                 pub struct #name {
