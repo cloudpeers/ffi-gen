@@ -544,10 +544,7 @@ impl RustGenerator {
     }
 
     fn ffi_num_type(&self, ty: NumType) -> rust::Tokens {
-        let is_wasm = match self.abi {
-            Abi::Wasm32 | Abi::Wasm64 => true,
-            _ => false,
-        };
+        let is_wasm = matches!(self.abi, Abi::Wasm32 | Abi::Wasm64);
         match ty {
             NumType::U8 if !is_wasm => quote!(u8),
             NumType::U16 if !is_wasm => quote!(u16),

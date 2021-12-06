@@ -340,7 +340,7 @@ impl Abi {
         Export {
             symbol: func.symbol(),
             instr,
-            ffi_args: ffi_args,
+            ffi_args,
             ffi_ret: func.ret(ffi_ffi_rets),
         }
     }

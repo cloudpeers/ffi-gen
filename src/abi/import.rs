@@ -54,7 +54,7 @@ impl Abi {
                     1,
                     1,
                 ));
-                ffi_args.extend_from_slice(&[ptr.clone(), len.clone()]);
+                ffi_args.extend_from_slice(&[ptr.clone(), len]);
                 instr_cleanup.push(Instr::Deallocate(ptr, cap, 1, 1));
             }
             AbiType::String => {
@@ -86,7 +86,7 @@ impl Abi {
                     size,
                     align,
                 ));
-                ffi_args.extend_from_slice(&[ptr.clone(), len.clone()]);
+                ffi_args.extend_from_slice(&[ptr.clone(), len]);
                 instr_cleanup.push(Instr::Deallocate(ptr, cap, size, align));
             }
             AbiType::Vec(ty) => {
@@ -364,7 +364,7 @@ impl Abi {
             symbol,
             abi_args,
             ffi_args,
-            instr: instr,
+            instr,
             ffi_ret: func.ret(ffi_rets),
             abi_ret,
         }
