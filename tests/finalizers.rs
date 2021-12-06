@@ -47,13 +47,13 @@ compile_pass! {
     ),
     (
         const f = () => {
-            let boxed = api.make_box();
+            let boxed = api.makeBox();
         };
         f();
         const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
         //boxed.drop();
         //assert.equal(api.was_dropped(), true);
-        while (!api.was_dropped()) {
+        while (!api.wasDropped()) {
             await delay(1000);
             global.gc();
         }
@@ -64,9 +64,9 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        make_box(): CustomType;
+        makeBox(): CustomType;
 
-        was_dropped(): boolean;
+        wasDropped(): boolean;
 
         drop(): void;
     }

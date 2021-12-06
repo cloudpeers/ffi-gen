@@ -182,11 +182,11 @@ class Api {
     this.instance.exports[symbol](0, ptr);
   }
 
-  hello_world() {
+  helloWorld() {
     this.instance.exports.__hello_world();
     return;
   }
-  async_hello_world() {
+  asyncHelloWorld() {
     const tmp0 = this.instance.exports.__async_hello_world();
     const tmp2 = tmp0;
     const tmp2_0 = () => {
@@ -194,14 +194,14 @@ class Api {
     };
     const tmp2_1 = new Box(tmp2, tmp2_0);
     const tmp1 = nativeFuture(tmp2_1, (a, b, c) => {
-      return this.__async_hello_world_future_poll(a, b, c);
+      return this.asyncHelloWorldFuturePoll(a, b, c);
     });
     return tmp1;
   }
-  __async_hello_world_future_poll(boxed, post_cobject, port) {
+  asyncHelloWorldFuturePoll(boxed, postCobject, port) {
     const tmp0 = boxed;
     const tmp1 = tmp0;
-    const tmp2 = post_cobject;
+    const tmp2 = postCobject;
     const tmp3 = tmp2;
     const tmp4 = port;
     const tmp5 = tmp4;

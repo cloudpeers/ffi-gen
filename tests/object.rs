@@ -67,14 +67,14 @@ compile_pass! {
     ),
     (
         const boxed = CustomType.create(api, 42);
-        assert.equal(boxed.do_something(), 42);
+        assert.equal(boxed.doSomething(), 42);
         boxed.drop();
-        assert.equal(api.was_dropped(), true);
+        assert.equal(api.wasDropped(), true);
 
         const obj = api.create(42);
-        assert.equal(obj.do_something(), 42);
+        assert.equal(obj.doSomething(), 42);
         obj.drop();
-        assert.equal(api.was_dropped(), true);
+        assert.equal(api.wasDropped(), true);
     ),
     (
     export class Api {
@@ -84,15 +84,15 @@ compile_pass! {
 
         create(value: number): CustomType;
 
-        was_dropped(): boolean;
+        wasDropped(): boolean;
 
         drop(): void;
     }
 
     export class CustomType {
-        static new_(api: Api, value: number): CustomType;
+        static create(api: Api, value: number): CustomType;
 
-        do_something(): number;
+        doSomething(): number;
 
         drop(): void;
     })
@@ -120,7 +120,16 @@ compile_pass! {
         const fut = api.create(42);
         assert.equal(await fut, 42);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        create(value: number): Promise<number>;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -187,7 +196,18 @@ compile_pass! {
         console.log(res);
         assert.equal(res, 42);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        create(): Promise<BigInt>;
+
+        wake(): void;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -254,7 +274,16 @@ compile_pass! {
         assert(counter == 2);
         clearInterval(i);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        create(values: Array<number>): ReadableStream<number>;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -302,5 +331,14 @@ compile_pass! {
         }
         assert.equal(err, true);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        create(value: number): Promise<number>;
+
+        drop(): void;
+    })
 }

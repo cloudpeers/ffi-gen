@@ -2,6 +2,7 @@ use crate::import::Instr;
 use crate::{Abi, AbiFunction, AbiObject, AbiType, FunctionType, Interface, NumType, Return, Var};
 use anyhow::Result;
 use genco::prelude::*;
+use heck::*;
 use std::path::Path;
 use std::process::Command;
 
@@ -38,14 +39,15 @@ impl TsGenerator {
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
+        let args = quote!(#(for (name, ty) in &func.args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
         let ret = self.generate_return_type(func.ret.as_ref());
+        let name = self.ident(&func.name);
         match &func.ty {
             FunctionType::Constructor(_) => {
-                quote!(static #(&func.name)(api: Api, #args): #ret;)
+                quote!(static #name(api: Api, #args): #ret;)
             }
             _ => {
-                quote!(#(&func.name)#args: #ret;)
+                quote!(#(name)(#args): #ret;)
             }
         }
     }
@@ -69,28 +71,47 @@ impl TsGenerator {
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
                     // TODO String etcs
-                    quote!(Array<#(&self.generate_return_type(Some(&AbiType::Num(*prim))))>)
+                    let inner = self.generate_return_type(Some(&AbiType::Num(*prim)));
+                    quote!(Array<#inner>)
                 }
-                AbiType::RefObject(i) | AbiType::Object(i) => quote!(#(i)),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::RefFuture(_) => todo!(),
-                AbiType::Future(_) => quote!(Promise),
-                AbiType::RefStream(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
+                AbiType::RefObject(i) | AbiType::Object(i) => {
+                    quote!(#(self.type_ident(i)))
+                }
+                AbiType::Option(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(#inner?)
+                }
+                AbiType::Result(i) => quote!(#(self.generate_return_type(Some(i)))),
+                AbiType::RefFuture(i) | AbiType::Future(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(Promise<#inner>)
+                }
+                AbiType::RefStream(i) | AbiType::Stream(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(ReadableStream<#inner>)
+                }
             }
         } else {
             quote!(void)
         }
     }
+
     fn generate_object(&self, obj: AbiObject) -> js::Tokens {
         quote! {
-            export class #(&obj.name) {
+            export class #(self.type_ident(&obj.name)) {
                 #(for method in obj.methods join (#<line>#<line>) => #(self.generate_function(method)))
 
                 drop(): void;
             }
         }
+    }
+
+    fn type_ident(&self, s: &str) -> String {
+        s.to_camel_case()
+    }
+
+    fn ident(&self, s: &str) -> String {
+        s.to_mixed_case()
     }
 }
 
@@ -290,14 +311,14 @@ impl JsGenerator {
 
             module.exports = {
                 Api: Api,
-                #(for obj in iface.objects() => #(&obj.name): #(&obj.name),)
+                #(for obj in iface.objects() => #(self.type_ident(&obj.name)): #(self.type_ident(&obj.name)),)
             }
         }
     }
 
     fn generate_object(&self, obj: AbiObject) -> js::Tokens {
         quote! {
-            class #(&obj.name) {
+            class #(self.type_ident(&obj.name)) {
                 constructor(api, box) {
                     this.api = api;
                     this.box = box;
@@ -325,20 +346,20 @@ impl JsGenerator {
             FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(boxed,),
             _ => quote!(),
         };
-        let name = match &func.ty {
+        let func_name = self.ident(match &func.ty {
             FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => &ffi.symbol,
             _ => &func.name,
-        };
-        let args = quote!(#(for (name, _) in &func.args => #name,));
+        });
+        let args = quote!(#(for (name, _) in &func.args => #(self.ident(name)),));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
         match &func.ty {
             FunctionType::Constructor(_) => quote! {
-                static #(&func.name)(api, #args) {
+                static #(self.ident(&func.name))(api, #args) {
                     #body
                 }
             },
             _ => quote! {
-                #name(#(boxed)#args) {
+                #func_name(#(boxed)#args) {
                     #body
                 }
             },
@@ -361,7 +382,7 @@ impl JsGenerator {
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
                 const #(self.var(out)) = new #obj(#api, #(self.var(box_))_1);
             },
-            Instr::BindArg(arg, out) => quote!(const #(self.var(out)) = #arg;),
+            Instr::BindArg(arg, out) => quote!(const #(self.var(out)) = #(self.ident(arg));),
             Instr::BindRets(ret, vars) => {
                 if vars.len() > 1 {
                     quote! {
@@ -463,14 +484,14 @@ impl JsGenerator {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
                 const #(self.var(out)) = nativeFuture(#(self.var(box_))_1, (a, b, c) => {
-                    return #api.#poll(a, b, c);
+                    return #api.#(self.ident(poll))(a, b, c);
                 });
             },
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
                 const #(self.var(out)) = nativeStream(#(self.var(box_))_1, (a, b, c, d) => {
-                    return #api.#poll(a, b, c, d);
+                    return #api.#(self.ident(poll))(a, b, c, d);
                 });
             },
         }
@@ -493,6 +514,14 @@ impl JsGenerator {
             NumType::F32 => quote!(Float32Array),
             NumType::F64 => quote!(Float64Array),
         }
+    }
+
+    fn type_ident(&self, s: &str) -> String {
+        s.to_camel_case()
+    }
+
+    fn ident(&self, s: &str) -> String {
+        s.to_mixed_case()
     }
 }
 
@@ -693,8 +722,12 @@ pub mod test_runner {
         let runner = runner_tokens.to_file_string()?;
         runner_file.write_all(runner.as_bytes())?;
 
+        js_file.keep()?;
+        rust_file.keep()?;
+        library_file.keep()?;
+        let (_, p) = runner_file.keep()?;
         let test = TestCases::new();
-        test.pass(runner_file.as_ref());
+        test.pass(p);
         Ok(())
     }
 
@@ -702,11 +735,10 @@ pub mod test_runner {
         let iface = Interface::parse(iface)?;
         let ts_gen = TsGenerator::default();
         let js_tokens = ts_gen.generate(iface);
+        let left = js_tokens.to_file_string().unwrap();
+        let right = ts_tokens.to_file_string().unwrap();
 
-        assert_eq!(
-            js_tokens.to_file_string().unwrap(),
-            ts_tokens.to_file_string().unwrap()
-        );
+        assert_eq!(left, right, "left: {}\nright: {}", left, right);
         Ok(())
     }
 }
