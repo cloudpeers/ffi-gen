@@ -567,7 +567,7 @@ pub mod test_runner {
         let res = tokens.to_file_string()?;
         let mut tmp = NamedTempFile::new()?;
         tmp.write_all(res.as_bytes())?;
-        println!("{}", res);
+        //println!("{}", res);
         let test = TestCases::new();
         test.pass(tmp.as_ref());
         Ok(())

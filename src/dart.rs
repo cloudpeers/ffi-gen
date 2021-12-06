@@ -106,6 +106,34 @@ impl DartGenerator {
                 }
             }
 
+            class Iter<T> extends Iterable<T> implements Iterator<T> {
+                final _Box _box;
+                final T? Function(int) _next;
+
+                Iter._(this._box, this._next);
+
+                @override
+                Iterator<T> get iterator => this;
+
+                T? _current;
+                T get current => _current!;
+
+                @override
+                bool moveNext() {
+                    final next = _next(_box.borrow());
+                    if (next == null) {
+                        return false;
+                    } else {
+                        _current = next;
+                        return true;
+                    }
+                }
+
+                void drop() {
+                    _box.drop();
+                }
+            }
+
             Future<T> _nativeFuture<T>(_Box box, T? Function(int, int, int) nativePoll) {
                 final completer = Completer<T>();
                 final rx = ReceivePort();
@@ -225,6 +253,7 @@ impl DartGenerator {
                 late final _deallocate = _deallocatePtr.asFunction<
                     void Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
+                #(for iter in iface.iterators() => #(self.generate_function(&iter.next())))
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
                 #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
 
@@ -267,11 +296,15 @@ impl DartGenerator {
             | FunctionType::PollStream(_, _) => "this",
         };
         let boxed = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(int boxed,),
+            FunctionType::NextIter(_, _)
+            | FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _) => quote!(int boxed,),
             _ => quote!(),
         };
         let name = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => {
+            FunctionType::NextIter(_, _)
+            | FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _) => {
                 format!("__{}", self.ident(&ffi.symbol))
             }
             _ => self.ident(&func.name),
@@ -305,10 +338,14 @@ impl DartGenerator {
     fn generate_instr(&self, api: &str, instr: &Instr) -> dart::Tokens {
         match instr {
             Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = _box.borrow();),
-            Instr::BorrowObject(in_, out) => {
+            Instr::BorrowObject(in_, out)
+            | Instr::BorrowIter(in_, out)
+            | Instr::BorrowFuture(in_, out)
+            | Instr::BorrowStream(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_))._box.borrow();)
             }
             Instr::MoveObject(in_, out)
+            | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_))._box.move();)
@@ -404,6 +441,12 @@ impl DartGenerator {
                     throw #(self.var(var))_0;
                 }
             },
+            Instr::LiftIter(box_, next, drop, out) => quote! {
+                final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
+                final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
+                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                final #(self.var(out)) = Iter._(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(next))));
+            },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
@@ -458,7 +501,7 @@ impl DartGenerator {
                 _ => quote!(List<dynamic>),
             },
             AbiType::RefObject(ty) | AbiType::Object(ty) => quote!(#ty),
-            AbiType::RefIter(ty) | AbiType::Iter(ty) => quote!(Iterator<#(self.generate_type(ty))>),
+            AbiType::RefIter(ty) | AbiType::Iter(ty) => quote!(Iter<#(self.generate_type(ty))>),
             AbiType::RefFuture(ty) | AbiType::Future(ty) => {
                 quote!(Future<#(self.generate_type(ty))>)
             }

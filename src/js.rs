@@ -362,6 +362,7 @@ impl JsGenerator {
                 }
 
                 #(for func in iface.functions() => #(self.generate_function(&func)))
+                #(for iter in iface.iterators() => #(self.generate_function(&iter.next())))
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
                 #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
             }
@@ -426,10 +427,14 @@ impl JsGenerator {
     fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
         match instr {
             Instr::BorrowSelf(out) => quote!(const #(self.var(out)) = this.box.borrow();),
-            Instr::BorrowObject(in_, out) => {
+            Instr::BorrowObject(in_, out)
+            | Instr::BorrowIter(in_, out)
+            | Instr::BorrowFuture(in_, out)
+            | Instr::BorrowStream(in_, out) => {
                 quote!(const #(self.var(out)) = #(self.var(in_)).box.borrow();)
             }
             Instr::MoveObject(in_, out)
+            | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
                 quote!(const #(self.var(out)) = #(self.var(in_)).box.move();)
@@ -536,6 +541,13 @@ impl JsGenerator {
                     }
                     throw #(self.var(var))_2;
                 }
+            },
+            Instr::LiftIter(box_, next, drop, out) => quote! {
+                const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
+                const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
+                const #(self.var(out)) = nativeIter(#(self.var(box_))_1, (a) => {
+                    return #api.#(self.ident(next))(a);
+                });
             },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };

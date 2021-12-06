@@ -390,6 +390,9 @@ impl Interface {
                 imports.push(abi.import(method));
             }
         }
+        for iter in self.iterators() {
+            imports.push(abi.import(&iter.next()));
+        }
         for fut in self.futures() {
             imports.push(abi.import(&fut.poll()));
         }

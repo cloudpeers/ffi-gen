@@ -121,7 +121,10 @@ compile_pass! {
         __vec_str_iter_drop(0, iter);
     ),
     (
-        final res = api.vecStr(); //["hello", "world"]);
+        final List<String> res = [];
+        for (final s in api.vecStr()) {
+            res.add(s);
+        }
         assert(res.length == 2);
         assert(res[0] == "hello");
         assert(res[1] == "world");

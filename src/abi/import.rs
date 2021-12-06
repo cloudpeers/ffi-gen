@@ -103,23 +103,39 @@ impl Abi {
                 import.push(Instr::MoveObject(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
-            AbiType::RefIter(_ty) => todo!(),
-            AbiType::Iter(_ty) => todo!(),
-            AbiType::RefFuture(_ty) => todo!(),
+            AbiType::RefIter(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                import.push(Instr::BorrowIter(arg.clone(), ptr.clone()));
+                args.push(ptr);
+            }
+            AbiType::Iter(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                import.push(Instr::MoveIter(arg.clone(), ptr.clone()));
+                args.push(ptr);
+            }
+            AbiType::RefFuture(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                import.push(Instr::BorrowFuture(arg.clone(), ptr.clone()));
+                args.push(ptr);
+            }
             AbiType::Future(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 import.push(Instr::MoveFuture(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
-            AbiType::RefStream(_ty) => todo!(),
+            AbiType::RefStream(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                import.push(Instr::BorrowStream(arg.clone(), ptr.clone()));
+                args.push(ptr);
+            }
             AbiType::Stream(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 import.push(Instr::MoveStream(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
-            AbiType::Option(_ty) => todo!(),
-            AbiType::Result(_ty) => todo!(),
-            AbiType::Tuple(_ty) => todo!(),
+            AbiType::Option(_) => todo!(),
+            AbiType::Tuple(_) => todo!(),
+            AbiType::Result(_) => todo!(),
         }
     }
 
@@ -196,7 +212,7 @@ impl Abi {
                 import.push(Instr::LiftVec(ptr.clone(), len, out, *ty));
                 import.push(Instr::Deallocate(ptr, cap, size, align));
             }
-            AbiType::RefObject(_obj) => todo!(),
+            AbiType::RefObject(_) => todo!(),
             AbiType::Object(obj) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
@@ -222,17 +238,23 @@ impl Abi {
                 self.import_return(symbol, &**ty, out, gen, rets, import);
             }
             AbiType::RefIter(_) => todo!(),
-            AbiType::Iter(_) => todo!(),
-            AbiType::RefFuture(_ty) => todo!(),
-            AbiType::Future(_ty) => {
+            AbiType::Iter(_) => {
+                let ptr = gen.gen_num(self.iptr());
+                rets.push(ptr.clone());
+                let next = format!("{}_iter_next", symbol);
+                let destructor = format!("{}_iter_drop", symbol);
+                import.push(Instr::LiftIter(ptr, next, destructor, out));
+            }
+            AbiType::RefFuture(_) => todo!(),
+            AbiType::Future(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
                 let poll = format!("{}_future_poll", symbol);
                 let destructor = format!("{}_future_drop", symbol);
                 import.push(Instr::LiftFuture(ptr, poll, destructor, out));
             }
-            AbiType::RefStream(_ty) => todo!(),
-            AbiType::Stream(_ty) => {
+            AbiType::RefStream(_) => todo!(),
+            AbiType::Stream(_) => {
                 let ptr = gen.gen_num(self.iptr());
                 rets.push(ptr.clone());
                 let poll = format!("{}_stream_poll", symbol);
@@ -262,6 +284,11 @@ impl Abi {
                 self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
             }
             FunctionType::PollStream(_, _) => {
+                let arg = gen.gen_num(self.iptr());
+                import.push(Instr::BindArg("boxed".to_string(), arg.clone()));
+                self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
+            }
+            FunctionType::NextIter(_, _) => {
                 let arg = gen.gen_num(self.iptr());
                 import.push(Instr::BindArg("boxed".to_string(), arg.clone()));
                 self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
@@ -322,8 +349,13 @@ pub enum Instr {
     BorrowObject(Var, Var),
     MoveObject(Var, Var),
     LiftObject(String, Var, String, Var),
+    BorrowIter(Var, Var),
+    MoveIter(Var, Var),
+    LiftIter(Var, String, String, Var),
+    BorrowFuture(Var, Var),
     MoveFuture(Var, Var),
     LiftFuture(Var, String, String, Var),
+    BorrowStream(Var, Var),
     MoveStream(Var, Var),
     LiftStream(Var, String, String, Var),
     Call(String, Option<Var>, Vec<Var>),
