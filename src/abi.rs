@@ -55,6 +55,7 @@ pub enum FunctionType {
     Constructor(String),
     Method(String),
     Function,
+    NextIter(String, AbiType),
     PollFuture(String, AbiType),
     PollStream(String, AbiType),
 }
@@ -75,6 +76,7 @@ impl AbiFunction {
                 format!("__{}_{}", object, &self.name)
             }
             FunctionType::Function => format!("__{}", &self.name),
+            FunctionType::NextIter(symbol, _) => format!("{}_iter_{}", symbol, &self.name),
             FunctionType::PollFuture(symbol, _) => format!("{}_future_{}", symbol, &self.name),
             FunctionType::PollStream(symbol, _) => format!("{}_stream_{}", symbol, &self.name),
         }
@@ -95,6 +97,24 @@ pub struct AbiObject {
     pub name: String,
     pub methods: Vec<AbiFunction>,
     pub destructor: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct AbiIter {
+    pub ty: AbiType,
+    pub symbol: String,
+}
+
+impl AbiIter {
+    pub fn next(&self) -> AbiFunction {
+        AbiFunction {
+            ty: FunctionType::NextIter(self.symbol.clone(), self.ty.clone()),
+            doc: vec![],
+            name: "next".to_string(),
+            args: vec![],
+            ret: Some(AbiType::Option(Box::new(self.ty.clone()))),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -274,6 +294,34 @@ impl Interface {
             funcs.push(func);
         }
         funcs
+    }
+
+    pub fn iterators(&self) -> Vec<AbiIter> {
+        let mut iterators = vec![];
+        let mut functions = self.functions();
+        for obj in self.objects() {
+            functions.extend(obj.methods);
+        }
+        for func in functions {
+            if let Some(ty) = func.ret.as_ref() {
+                let mut p = ty;
+                loop {
+                    match p {
+                        AbiType::Option(ty) | AbiType::Result(ty) => p = &**ty,
+                        AbiType::Iter(ty) => {
+                            let symbol = func.symbol();
+                            iterators.push(AbiIter {
+                                ty: (&**ty).clone(),
+                                symbol,
+                            });
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+        }
+        iterators
     }
 
     pub fn futures(&self) -> Vec<AbiFuture> {

@@ -5,8 +5,8 @@ mod parser;
 mod rust;
 
 use crate::abi::{
-    export, import, AbiFunction, AbiFuture, AbiObject, AbiStream, AbiType, FunctionType, NumType,
-    Return, Var,
+    export, import, AbiFunction, AbiFuture, AbiIter, AbiObject, AbiStream, AbiType, FunctionType,
+    NumType, Return, Var,
 };
 use crate::dart::DartGenerator;
 use crate::js::{JsGenerator, TsGenerator, WasmMultiValueShim};

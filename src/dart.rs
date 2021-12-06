@@ -262,6 +262,7 @@ impl DartGenerator {
             FunctionType::Constructor(_) => "api",
             FunctionType::Method(_) => "_api",
             FunctionType::Function
+            | FunctionType::NextIter(_, _)
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => "this",
         };

@@ -100,6 +100,63 @@ compile_pass! {
 }
 
 compile_pass! {
+    iterator,
+    r#"fn vec_str() -> Iterator<string>;
+    //fn vec_vec_str() -> Iterator<Iterator<string>>;
+    "#,
+    (
+        pub fn vec_str() -> Vec<String> {
+            vec!["hello".into(), "world".into()]
+        }
+
+        /*pub fn vec_vec_str() -> Vec<Vec<String>> {
+            vec![vec!["hello".into()], vec!["world".into()]]
+        }*/
+    ),
+    (
+        let iter = __vec_str();
+        assert_eq!(__vec_str_iter_next(iter).ret0, 1);
+        assert_eq!(__vec_str_iter_next(iter).ret0, 1);
+        assert_eq!(__vec_str_iter_next(iter).ret0, 0);
+        __vec_str_iter_drop(0, iter);
+    ),
+    (
+        final res = api.vecStr(); //["hello", "world"]);
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+
+        /*final res = api.vecVecStr(); //[["hello"], ["world"]]);
+        assert(res.length == 2);
+        assert(res[0].length == 1);
+        assert(res[0][0] == "hello");
+        assert(res[1].length == 1);
+        assert(res[1][0] == "world");*/
+    ),
+    (
+        const res = api.vecStr(); //["hello", "world"]);
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+
+        /*const res = api.vecVecStr(); //[["hello"], ["world"]]);
+        assert(res.length == 2);
+        assert(res[0].length == 1);
+        assert(res[0][0] == "hello");
+        assert(res[1].length == 1);
+        assert(res[1][0] == "world");*/
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        vecStr(arg: Array<string>): Array<string>;
+    })
+}
+
+compile_pass! {
     nodelay_future,
     "fn create(value: u32) -> Future<u32>;",
     (

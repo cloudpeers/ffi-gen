@@ -550,7 +550,7 @@ compile_pass! {
     tuples,
     r#"fn tuple0(arg: ()) -> ();
     fn tuple1(arg: (i32,)) -> (i32,);
-    fn tuple2(arg: (i32, i32)) -> (i32, i32);"#,
+    fn tuple2(arg: (i32, f32)) -> (i32, f32);"#,
     (
         pub fn tuple0(arg: ()) -> () {
             arg
@@ -564,7 +564,13 @@ compile_pass! {
             arg
         }
     ),
-    ( ),
+    (
+        __tuple0();
+        assert_eq!(__tuple1(42), 42);
+        let ret = __tuple2(42, 99.0);
+        assert_eq!(ret.ret0, 42);
+        assert_eq!(ret.ret1, 99.0);
+    ),
     (
         api.tuple0();
         assert(api.tuple1(42) == 42);
@@ -596,44 +602,28 @@ compile_pass! {
 }
 
 compile_pass! {
-    vecs,
-    r#"fn vec_str() -> Iterator<string>;
-    fn vec_vec_str() -> Iterator<Iterator<string>>;"#,
+    arg_opt_i32_ret_opt_i32,
+    "fn identity(arg: Option<i32>) -> Option<i32>;",
     (
-        pub fn vec_str() -> Vec<String> {
-            vec!["hello".into(), "world".into()]
-        }
-
-        pub fn vec_vec_str(arg: Vec<Vec<String>>) -> Vec<Vec<String>> {
-            vec![vec!["hello".into()], vec!["world".into()]]
+        pub fn identity(arg: Option<i32>) -> Option<i32> {
+            arg
         }
     ),
-    ( ),
     (
-        final res = api.vecStr(); //["hello", "world"]);
-        assert(res.length == 2);
-        assert(res[0] == "hello");
-        assert(res[1] == "world");
-
-        final res = api.vecVecStr(); //[["hello"], ["world"]]);
-        assert(res.length == 2);
-        assert(res[0].length == 1);
-        assert(res[0][0] == "hello");
-        assert(res[1].length == 1);
-        assert(res[1][0] == "world");
+        let ret = __identity(0, 0);
+        assert_eq!(ret.ret0, 0);
+        assert_eq!(ret.ret1, 0);
+        let ret = __identity(1, 42);
+        assert_eq!(ret.ret0, 1);
+        assert_eq!(ret.ret1, 42);
     ),
     (
-        const res = api.vecStr(); //["hello", "world"]);
-        assert(res.length == 2);
-        assert(res[0] == "hello");
-        assert(res[1] == "world");
-
-        const res = api.vecVecStr(); //[["hello"], ["world"]]);
-        assert(res.length == 2);
-        assert(res[0].length == 1);
-        assert(res[0][0] == "hello");
-        assert(res[1].length == 1);
-        assert(res[1][0] == "world");
+        assert(api.identity(null) == null);
+        assert(api.identity(42) == 42);
+    ),
+    (
+        assert.equal(api.identity(null), null);
+        assert.equal(api.identity(42), 42);
     ),
     (
     export class Api {
@@ -641,8 +631,6 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        vecStr(arg: Array<string>): Array<string>;
-
-        vecVecStr(arg: Array<Array<string>>): Array<Array<string>>;
+        identity(arg: i32?): i32?;
     })
 }

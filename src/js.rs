@@ -133,7 +133,7 @@ impl TsGenerator {
                 AbiType::Tuple(tys) => match tys.len() {
                     0 => quote!(void),
                     1 => self.generate_return_type(Some(&tys[0])),
-                    _ => quote!([#(for ty in tys => self.generate_return_type(Some(ty))),]),
+                    _ => quote!([#(for ty in tys => #(self.generate_return_type(Some(ty))),)]),
                 },
             }
         } else {
@@ -395,6 +395,7 @@ impl JsGenerator {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this.api),
             FunctionType::Function
+            | FunctionType::NextIter(_, _)
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => quote!(this),
         };

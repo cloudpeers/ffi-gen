@@ -268,6 +268,7 @@ impl Abi {
                     self.export_return(ret, gen, &mut instr, rets);
                 }
                 exports.push(Instr::LowerTuple(ret, vars));
+                exports.extend(instr);
             }
         }
     }
@@ -284,6 +285,13 @@ impl Abi {
                 let ptr = gen.gen_num(self.iptr());
                 def.push(ptr.clone());
                 exports.push(Instr::LiftRefObject(ptr, out.clone(), object.clone()));
+                Some(out)
+            }
+            FunctionType::NextIter(_, ty) => {
+                let out = gen.gen(AbiType::RefIter(Box::new(ty.clone())));
+                let ptr = gen.gen_num(self.iptr());
+                def.push(ptr.clone());
+                exports.push(Instr::LiftRefIter(ptr, out.clone(), ty.clone()));
                 Some(out)
             }
             FunctionType::PollFuture(_, ty) => {
