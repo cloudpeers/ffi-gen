@@ -471,13 +471,14 @@ impl JsGenerator {
             Instr::LiftNum(r#in, out, NumType::U32) => {
                 quote!(const #(self.var(out)) = #(self.var(r#in)) >>> 0;)
             }
-            // Casts below i32 are no ops as wasm only has i32 and i64
-            // TODO
-            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
+            Instr::LowerNum(in_, out, _num) => {
+                quote!(#(self.var(out)) = #(self.var(in_));)
+            }
+            Instr::LiftNum(in_, out, _num) => {
                 quote!(const #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(const #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
+                quote!(#(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => quote!(const #(self.var(out)) = #(self.var(in_)) > 0;),
             Instr::Deallocate(ptr, len, size, align) => quote! {
@@ -488,8 +489,8 @@ impl JsGenerator {
             Instr::LowerString(in_, ptr, len, size, align) => quote! {
                 const #(self.var(in_))_0 = new TextEncoder();
                 const #(self.var(in_))_1 = #(self.var(in_))_0.encode(#(self.var(in_)));
-                const #(self.var(len)) = #(self.var(in_))_1.length;
-                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                #(self.var(len)) = #(self.var(in_))_1.length;
+                #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
                 const #(self.var(ptr))_0 =
                     new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
                 #(self.var(ptr))_0.set(#(self.var(in_))_1, 0);
@@ -501,8 +502,8 @@ impl JsGenerator {
                 const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
             Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
-                const #(self.var(len)) = #(self.var(in_)).length;
-                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                #(self.var(len)) = #(self.var(in_)).length;
+                #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
                 const #(self.var(ptr))_0 =
                     new #(self.generate_array(*ty))(
                         #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
@@ -523,11 +524,23 @@ impl JsGenerator {
                     invoke
                 }
             }
+            Instr::DefineArgs(vars) => quote! {
+                #(for var in vars => let #(self.var(var)) = 0;)
+            },
             Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
             Instr::HandleNull(var) => quote! {
                 if (#(self.var(var)) === 0) {
                     return null;
+                }
+            },
+            Instr::LowerOption(arg, var, some, some_instr) => quote! {
+                if (#(self.var(arg)) == null) {
+                    #(self.var(var)) = 0;
+                } else {
+                    #(self.var(var)) = 1;
+                    const #(self.var(some)) = #(self.var(arg));
+                    #(for inst in some_instr => #(self.generate_instr(api, inst)))
                 }
             },
             Instr::HandleError(var, ptr, len, cap) => quote! {
@@ -563,6 +576,8 @@ impl JsGenerator {
                     return #api.#(self.ident(poll))(a, b, c, d);
                 });
             },
+            Instr::LiftTuple(_, _) => todo!(),
+            Instr::LowerTuple(_, _) => todo!(),
         }
     }
 
@@ -774,7 +789,7 @@ pub mod test_runner {
                     .expect("Compiling lib")
                     .success();
                 assert!(ret);
-                //println!("{}", #_(#bin));
+                println!("{}", #_(#bin));
                 #wasm_multi_value
                 let ret = Command::new("node")
                     .arg("--expose-gc")

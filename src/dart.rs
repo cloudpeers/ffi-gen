@@ -358,20 +358,23 @@ impl DartGenerator {
             },
             Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #(self.ident(arg));),
             Instr::BindRets(ret, vars) => {
-                if vars.len() > 1 {
-                    quote! {
+                match vars.len() {
+                    0 => quote!(),
+                    1 => quote!(final #(self.var(&vars[0])) = #(self.var(ret));),
+                    _ => quote! {
                         #(for (idx, var) in vars.iter().enumerate() =>
                             final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
-                    }
-                } else {
-                    quote!(final #(self.var(&vars[0])) = #(self.var(ret));)
+                    },
                 }
             }
-            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
+            Instr::LowerNum(in_, out, _num) => {
+                quote!(#(self.var(out)) = #(self.var(in_));)
+            }
+            Instr::LiftNum(in_, out, _num) => {
                 quote!(final #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
+                quote!(#(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_)) > 0;)
@@ -385,24 +388,24 @@ impl DartGenerator {
             },
             Instr::LowerString(in_, ptr, len, size, align) => quote! {
                 final #(self.var(in_))_0 = utf8.encode(#(self.var(in_)));
-                final #(self.var(len)) = #(self.var(in_))_0.length;
+                #(self.var(len)) = #(self.var(in_))_0.length;
                 final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 =
                     #api.__allocate(#(self.var(len)) * #(*size), #(*align));
                 final Uint8List #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
                 #(self.var(ptr))_1.setAll(0, #(self.var(in_))_0);
-                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(ptr)) = #(self.var(ptr))_0.address;
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
                 final #(self.var(out)) = utf8.decode(#(self.var(ptr))_0.asTypedList(#(self.var(len))));
             },
             Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
-                final #(self.var(len)) = #(self.var(in_)).length;
+                #(self.var(len)) = #(self.var(in_)).length;
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
                     #api.__allocate(#(self.var(len)) * #(*size), #(*align));
                 final #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
                 #(self.var(ptr))_1.setAll(0, #(self.var(in_)));
-                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(ptr)) = #(self.var(ptr))_0.address;
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
@@ -422,11 +425,23 @@ impl DartGenerator {
                     invoke
                 }
             }
+            Instr::DefineArgs(vars) => quote! {
+                #(for var in vars => var #(self.var(var)) = 0;)
+            },
             Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
             Instr::HandleNull(var) => quote! {
                 if (#(self.var(var)) == 0) {
                     return null;
+                }
+            },
+            Instr::LowerOption(arg, var, some, some_instr) => quote! {
+                if (#(self.var(arg)) == null) {
+                    #(self.var(var)) = 0;
+                } else {
+                    #(self.var(var)) = 1;
+                    final #(self.var(some)) = #(self.var(arg));
+                    #(for inst in some_instr => #(self.generate_instr(api, inst)))
                 }
             },
             Instr::HandleError(var, ptr, len, cap) => quote! {
@@ -458,6 +473,26 @@ impl DartGenerator {
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
                 #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
+            },
+            Instr::LiftTuple(vars, out) => {
+                match vars.len() {
+                    0 => quote!(),
+                    1 => quote!(), //final #(self.var(out)) = #(self.var(&vars[0]));),
+                    _ => quote! {
+                        final List #(self.var(out)) = [];
+                        #(for var in vars => #(self.var(out)).add(#(self.var(var)));)
+                    },
+                }
+            },
+            Instr::LowerTuple(in_, vars) => {
+                match vars.len() {
+                    0 => quote!(),
+                    1 => quote!(#(self.var(&vars[0])) = #(self.var(in_));),
+                    _ => quote! {
+                        //final List #(self.var(out)) = [];
+                        //#(for var in vars => #(self.var(out)).add(#(self.var(var)));)
+                    },
+                }
             },
             Instr::LiftNumFromU32Tuple(..) => unreachable!(),
         }
@@ -497,7 +532,7 @@ impl DartGenerator {
             AbiType::Result(ty) => self.generate_type(&**ty),
             AbiType::Tuple(tuple) => match tuple.len() {
                 0 => quote!(void),
-                1 => quote!(self.generate_type(tuple[0])),
+                1 => self.generate_type(&tuple[0]),
                 _ => quote!(List<dynamic>),
             },
             AbiType::RefObject(ty) | AbiType::Object(ty) => quote!(#ty),
@@ -651,7 +686,7 @@ pub mod test_runner {
                     .unwrap()
                     .success();
                 assert!(ret);
-                //println!("{}", #_(#bin));
+                println!("{}", #_(#bin));
                 let ret = Command::new("dart")
                     .env("LD_LIBRARY_PATH", #(quoted(library_dir.as_ref().to_str().unwrap())))
                     .arg("--enable-asserts")

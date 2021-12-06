@@ -133,8 +133,22 @@ impl Abi {
                 import.push(Instr::MoveStream(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
-            AbiType::Option(_) => todo!(),
-            AbiType::Tuple(_) => todo!(),
+            AbiType::Option(ty) => {
+                let var = gen.gen_num(NumType::U8);
+                let some = gen.gen((&**ty).clone());
+                args.push(var.clone());
+                let mut some_instr = vec![];
+                self.import_arg(some.clone(), gen, args, &mut some_instr, import_cleanup);
+                import.push(Instr::LowerOption(arg, var, some, some_instr));
+            }
+            AbiType::Tuple(tys) => {
+                let mut vars = vec![];
+                for ty in tys {
+                    let arg = gen.gen(ty.clone());
+                    vars.push(arg.clone());
+                    self.import_arg(arg, gen, args, import, import_cleanup);
+                }
+            }
             AbiType::Result(_) => todo!(),
         }
     }
@@ -261,7 +275,15 @@ impl Abi {
                 let destructor = format!("{}_stream_drop", symbol);
                 import.push(Instr::LiftStream(ptr, poll, destructor, out));
             }
-            AbiType::Tuple(_ty) => todo!(),
+            AbiType::Tuple(tys) => {
+                let mut vars = vec![];
+                for ty in tys {
+                    let ret = gen.gen(ty.clone());
+                    vars.push(ret.clone());
+                    self.import_return(symbol, ty, ret, gen, rets, import);
+                }
+                import.push(Instr::LiftTuple(vars, out));
+            }
         }
     }
 
@@ -298,7 +320,12 @@ impl Abi {
         for (name, ty) in func.args.iter() {
             let arg = gen.gen(ty.clone());
             import.push(Instr::BindArg(name.clone(), arg.clone()));
-            self.import_arg(arg, &mut gen, &mut args, &mut import, &mut import_cleanup);
+            let mut instr = vec![];
+            self.import_arg(arg, &mut gen, &mut args, &mut instr, &mut import_cleanup);
+            if !args.is_empty() {
+                import.push(Instr::DefineArgs(args.clone()));
+            }
+            import.extend(instr);
         }
         let ret = func.ret.as_ref().map(|ty| gen.gen(ty.clone()));
         import.push(Instr::Call(symbol.clone(), ret.clone(), args.clone()));
@@ -344,6 +371,7 @@ pub enum Instr {
     LiftVec(Var, Var, Var, NumType),
     LowerVec(Var, Var, Var, NumType, usize, usize),
     HandleNull(Var),
+    LowerOption(Var, Var, Var, Vec<Instr>),
     HandleError(Var, Var, Var, Var),
     BorrowSelf(Var),
     BorrowObject(Var, Var),
@@ -358,6 +386,9 @@ pub enum Instr {
     BorrowStream(Var, Var),
     MoveStream(Var, Var),
     LiftStream(Var, String, String, Var),
+    LiftTuple(Vec<Var>, Var),
+    LowerTuple(Var, Vec<Var>),
+    DefineArgs(Vec<Var>),
     Call(String, Option<Var>, Vec<Var>),
     BindRets(Var, Vec<Var>),
     ReturnValue(Var),
