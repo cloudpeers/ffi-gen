@@ -31,6 +31,8 @@ pub enum AbiType {
     Object(String),
     Option(Box<AbiType>),
     Result(Box<AbiType>),
+    RefIter(Box<AbiType>),
+    Iter(Box<AbiType>),
     RefFuture(Box<AbiType>),
     Future(Box<AbiType>),
     RefStream(Box<AbiType>),
@@ -370,21 +372,38 @@ impl Interface {
                     AbiType::Num(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
-                Type::Ident(ident) => AbiType::RefObject(ident.clone()),
+                Type::Ident(ident) => {
+                    if !self.is_object(ident) {
+                        panic!("unknown identifier {}", ident);
+                    }
+                    AbiType::RefObject(ident.clone())
+                }
                 ty => unimplemented!("&{:?}", ty),
             },
             Type::String => AbiType::String,
+            Type::Slice(_) => panic!("slice needs to be passed by reference"),
             Type::Vec(inner) => match self.to_type(inner) {
                 AbiType::Num(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
             },
-            Type::Ident(ident) if self.is_object(ident) => AbiType::Object(ident.clone()),
-            Type::Option(ty) => AbiType::Option(Box::new(self.to_type(ty))),
+            Type::Ident(ident) => {
+                if !self.is_object(ident) {
+                    panic!("unknown identifier {}", ident);
+                }
+                AbiType::Object(ident.clone())
+            }
+            Type::Option(ty) => {
+                let inner = self.to_type(ty);
+                if let AbiType::Option(_) = inner {
+                    panic!("nested options are not supported");
+                }
+                AbiType::Option(Box::new(inner))
+            }
             Type::Result(ty) => AbiType::Result(Box::new(self.to_type(ty))),
+            Type::Iter(ty) => AbiType::Iter(Box::new(self.to_type(ty))),
             Type::Future(ty) => AbiType::Future(Box::new(self.to_type(ty))),
             Type::Stream(ty) => AbiType::Stream(Box::new(self.to_type(ty))),
             Type::Tuple(ty) => AbiType::Tuple(ty.iter().map(|ty| self.to_type(ty)).collect()),
-            ty => unimplemented!("{:?}", ty),
         }
     }
 }

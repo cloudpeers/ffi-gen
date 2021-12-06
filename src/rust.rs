@@ -348,12 +348,17 @@ impl RustGenerator {
                 let #(self.var(in_))_0 = assert_send_static(#(self.var(in_)));
                 #(self.var(out)) = Box::into_raw(Box::new(#(self.var(in_))_0)) as _;
             },
+            Instr::LiftRefIter(in_, out, ty) => quote! {
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiIter<#(self.ty(ty))>) };
+            },
+            Instr::LowerRefIter(in_, out, ty) => todo!(),
+            Instr::LiftIter(in_, out, ty) => todo!(),
+            Instr::LowerIter(in_, out, ty) => todo!(),
             Instr::LiftRefFuture(in_, out, ty) => quote! {
                 let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiFuture<#(self.ty(ty))>) };
             },
-            Instr::LiftRefStream(in_, out, ty) => quote! {
-                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiStream<#(self.ty(ty))>) };
-            },
+            Instr::LowerRefFuture(in_, out, ty) => todo!(),
+            Instr::LiftFuture(in_, out, ty) => todo!(),
             Instr::LowerFuture(in_, out, ty) => {
                 let future = if let AbiType::Result(_) = ty {
                     quote!(async move { #(self.var(in_)).await.map_err(|err| err.to_string()) })
@@ -366,6 +371,11 @@ impl RustGenerator {
                     #(self.var(out)) = Box::into_raw(Box::new(#(self.var(out))_1)) as _;
                 }
             }
+            Instr::LiftRefStream(in_, out, ty) => quote! {
+                let #(self.var(out)) = unsafe { &mut *(#(self.var(in_)) as *mut FfiStream<#(self.ty(ty))>) };
+            },
+            Instr::LowerRefStream(in_, out, ty) => todo!(),
+            Instr::LiftStream(in_, out, ty) => todo!(),
             Instr::LowerStream(in_, out, ty) => {
                 let map_err = if let AbiType::Result(_) = ty {
                     quote!(.map_err(|err| err.to_string()))
@@ -377,6 +387,7 @@ impl RustGenerator {
                     #(self.var(out)) = Box::into_raw(Box::new(#(self.var(out))_0)) as _;
                 }
             }
+            Instr::LiftOption(_, _, _, _) => todo!(),
             Instr::LowerOption(in_, var, some, some_instr) => quote! {
                 if let Some(#(self.var(some))) = #(self.var(in_)) {
                     #(self.var(var)) = 1;
@@ -398,6 +409,8 @@ impl RustGenerator {
                     }
                 };
             },
+            Instr::LiftTuple(_, _) => todo!(),
+            Instr::LowerTuple(_, _) => todo!(),
             Instr::CallAbi(ty, self_, name, ret, args) => {
                 let invoke = match ty {
                     FunctionType::Constructor(object) => {
@@ -444,10 +457,12 @@ impl RustGenerator {
             AbiType::Object(ident) => quote!(#ident),
             AbiType::RefObject(ident) => quote!(&#ident),
             AbiType::Tuple(ty) => quote!((#(for ty in ty => #(self.ty(ty)),))),
-            AbiType::RefFuture(_)
-            | AbiType::Future(_)
-            | AbiType::RefStream(_)
-            | AbiType::Stream(_) => unimplemented!(),
+            AbiType::RefIter(ty) => quote!(&impl IntoIterator<Item = #(self.ty(ty))>),
+            AbiType::Iter(ty) => quote!(impl IntoIterator<Item = #(self.ty(ty))>),
+            AbiType::RefFuture(ty) => quote!(&impl Future<Output = #(self.ty(ty))>),
+            AbiType::Future(ty) => quote!(impl Future<Output = #(self.ty(ty))>),
+            AbiType::RefStream(ty) => quote!(&impl Stream<Item = #(self.ty(ty))>),
+            AbiType::Stream(ty) => quote!(impl Stream<Item = #(self.ty(ty))>),
         }
     }
 

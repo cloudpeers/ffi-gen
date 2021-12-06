@@ -103,6 +103,8 @@ impl Abi {
                 import.push(Instr::MoveObject(arg.clone(), ptr.clone()));
                 args.push(ptr);
             }
+            AbiType::RefIter(_ty) => todo!(),
+            AbiType::Iter(_ty) => todo!(),
             AbiType::RefFuture(_ty) => todo!(),
             AbiType::Future(_) => {
                 let ptr = gen.gen_num(self.iptr());
@@ -219,6 +221,8 @@ impl Abi {
                 import.push(Instr::HandleError(var, ptr, len, cap));
                 self.import_return(symbol, &**ty, out, gen, rets, import);
             }
+            AbiType::RefIter(_) => todo!(),
+            AbiType::Iter(_) => todo!(),
             AbiType::RefFuture(_ty) => todo!(),
             AbiType::Future(_ty) => {
                 let ptr = gen.gen_num(self.iptr());

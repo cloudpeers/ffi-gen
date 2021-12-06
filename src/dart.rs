@@ -454,11 +454,16 @@ impl DartGenerator {
             AbiType::Tuple(tuple) => match tuple.len() {
                 0 => quote!(void),
                 1 => quote!(self.generate_type(tuple[0])),
-                _ => todo!(),
+                _ => quote!(List<dynamic>),
             },
             AbiType::RefObject(ty) | AbiType::Object(ty) => quote!(#ty),
-            AbiType::RefFuture(_) | AbiType::Future(_) => quote!(Future),
-            AbiType::RefStream(_) | AbiType::Stream(_) => quote!(Stream),
+            AbiType::RefIter(ty) | AbiType::Iter(ty) => quote!(Iterator<#(self.generate_type(ty))>),
+            AbiType::RefFuture(ty) | AbiType::Future(ty) => {
+                quote!(Future<#(self.generate_type(ty))>)
+            }
+            AbiType::RefStream(ty) | AbiType::Stream(ty) => {
+                quote!(Stream<#(self.generate_type(ty))>)
+            }
         }
     }
 

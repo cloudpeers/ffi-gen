@@ -178,6 +178,7 @@ pub enum Type {
     Vec(Box<Type>),
     Option(Box<Type>),
     Result(Box<Type>),
+    Iter(Box<Type>),
     Future(Box<Type>),
     Stream(Box<Type>),
     Tuple(Vec<Type>),
@@ -210,6 +211,7 @@ impl Type {
             | Rule::opt
             | Rule::res
             | Rule::ref_
+            | Rule::iter
             | Rule::fut
             | Rule::stream => {
                 let first = pair.as_str().chars().next().unwrap();
@@ -226,6 +228,7 @@ impl Type {
                     'O' => Type::Option(inner),
                     'R' => Type::Result(inner),
                     '&' => Type::Ref(inner),
+                    'I' => Type::Iter(inner),
                     'F' => Type::Future(inner),
                     'S' => Type::Stream(inner),
                     _ => unreachable!(),

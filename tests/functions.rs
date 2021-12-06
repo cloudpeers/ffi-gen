@@ -597,25 +597,25 @@ compile_pass! {
 
 compile_pass! {
     vecs,
-    r#"fn vec_str(arg: Vec<string>) -> Vec<string>;
-    fn vec_vec_str(arg: Vec<Vec<string>>) -> Vec<Vec<string>>;"#,
+    r#"fn vec_str() -> Iterator<string>;
+    fn vec_vec_str() -> Iterator<Iterator<string>>;"#,
     (
-        pub fn vec_str(arg: Vec<String>) -> Vec<String> {
-            arg
+        pub fn vec_str() -> Vec<String> {
+            vec!["hello".into(), "world".into()]
         }
 
         pub fn vec_vec_str(arg: Vec<Vec<String>>) -> Vec<Vec<String>> {
-            arg
+            vec![vec!["hello".into()], vec!["world".into()]]
         }
     ),
     ( ),
     (
-        final res = api.vecStr(["hello", "world"]);
+        final res = api.vecStr(); //["hello", "world"]);
         assert(res.length == 2);
         assert(res[0] == "hello");
         assert(res[1] == "world");
 
-        final res = api.vecVecStr([["hello"], ["world"]]);
+        final res = api.vecVecStr(); //[["hello"], ["world"]]);
         assert(res.length == 2);
         assert(res[0].length == 1);
         assert(res[0][0] == "hello");
@@ -623,12 +623,12 @@ compile_pass! {
         assert(res[1][0] == "world");
     ),
     (
-        const res = api.vecStr(["hello", "world"]);
+        const res = api.vecStr(); //["hello", "world"]);
         assert(res.length == 2);
         assert(res[0] == "hello");
         assert(res[1] == "world");
 
-        const res = api.vecVecStr([["hello"], ["world"]]);
+        const res = api.vecVecStr(); //[["hello"], ["world"]]);
         assert(res.length == 2);
         assert(res[0].length == 1);
         assert(res[0][0] == "hello");
