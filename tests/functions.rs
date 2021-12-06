@@ -545,3 +545,104 @@ compile_pass! {
         drop(): void;
     })
 }
+
+compile_pass! {
+    tuples,
+    r#"fn tuple0(arg: ()) -> ();
+    fn tuple1(arg: (i32,)) -> (i32,);
+    fn tuple2(arg: (i32, i32)) -> (i32, i32);"#,
+    (
+        pub fn tuple0(arg: ()) -> () {
+            arg
+        }
+
+        pub fn tuple1(arg: (i32,)) -> (i32,) {
+            arg
+        }
+
+        pub fn tuple2(arg: (i32, f32)) -> (i32, f32) {
+            arg
+        }
+    ),
+    ( ),
+    (
+        api.tuple0();
+        assert(api.tuple1(42) == 42);
+        final tuple = api.tuple2(42, 99.0);
+        assert(tuple[0] == 42);
+        assert(tuple[1] == 99.0);
+    ),
+    (
+        const.tuple0();
+        assert.equal(api.tuple1(42), 42);
+        const tuple = api.tuple2(42, 99.0);
+        assert.equal(tuple[0], 42);
+        assert.equal(tuple[1], 99.0);
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        tuple0();
+
+        tuple1(arg: number): number;
+
+        tuple2(arg: [number, number]): [number, number];
+
+        drop(): void;
+    })
+}
+
+compile_pass! {
+    vecs,
+    r#"fn vec_str(arg: Vec<string>) -> Vec<string>;
+    fn vec_vec_str(arg: Vec<Vec<string>>) -> Vec<Vec<string>>;"#,
+    (
+        pub fn vec_str(arg: Vec<String>) -> Vec<String> {
+            arg
+        }
+
+        pub fn vec_vec_str(arg: Vec<Vec<String>>) -> Vec<Vec<String>> {
+            arg
+        }
+    ),
+    ( ),
+    (
+        final res = api.vecStr(["hello", "world"]);
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+
+        final res = api.vecVecStr([["hello"], ["world"]]);
+        assert(res.length == 2);
+        assert(res[0].length == 1);
+        assert(res[0][0] == "hello");
+        assert(res[1].length == 1);
+        assert(res[1][0] == "world");
+    ),
+    (
+        const res = api.vecStr(["hello", "world"]);
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+
+        const res = api.vecVecStr([["hello"], ["world"]]);
+        assert(res.length == 2);
+        assert(res[0].length == 1);
+        assert(res[0][0] == "hello");
+        assert(res[1].length == 1);
+        assert(res[1][0] == "world");
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        vecStr(arg: Array<string>): Array<string>;
+
+        vecVecStr(arg: Array<Array<string>>): Array<Array<string>>;
+    })
+}
