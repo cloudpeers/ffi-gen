@@ -11,7 +11,7 @@ fn main() {
     let ffigen = FfiGen::new(&path).unwrap();
     let dart = dir.join("dart").join("lib").join("bindings.dart");
     ffigen.generate_dart(dart, "api", "api").unwrap();
-    let js = dir.join("js").join("bindings.js");
+    let js = dir.join("js").join("bindings.mjs");
     ffigen.generate_js(js).unwrap();
     let ts = dir.join("js").join("bindings.d.ts");
     ffigen.generate_ts(ts).unwrap();
