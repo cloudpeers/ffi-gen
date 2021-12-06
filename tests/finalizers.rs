@@ -64,9 +64,9 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        make_box(): CustomType;
+        makeBox(): CustomType;
 
-        was_dropped(): boolean;
+        wasDropped(): boolean;
 
         drop(): void;
     }

@@ -3,9 +3,9 @@ export class Api {
 
   fetch(url, imports): Promise<void>;
 
-  hello_world: void;
+  helloWorld(): void;
 
-  async_hello_world: Promise;
+  asyncHelloWorld(): Promise<number>;
 
   drop(): void;
 }

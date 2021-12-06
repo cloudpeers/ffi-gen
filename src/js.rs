@@ -39,15 +39,15 @@ impl TsGenerator {
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #name: #(self.generate_return_type(Some(ty)))));
+        let args = quote!(#(for (name, ty) in &func.args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
         let ret = self.generate_return_type(func.ret.as_ref());
-        let name = &func.name;
+        let name = self.ident(&func.name);
         match &func.ty {
             FunctionType::Constructor(_) => {
                 quote!(static #name(api: Api, #args): #ret;)
             }
             _ => {
-                quote!(#(name)#args: #ret;)
+                quote!(#(name)(#args): #ret;)
             }
         }
     }
@@ -71,28 +71,47 @@ impl TsGenerator {
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
                     // TODO String etcs
-                    quote!(Array<#(&self.generate_return_type(Some(&AbiType::Num(*prim))))>)
+                    let inner = self.generate_return_type(Some(&AbiType::Num(*prim)));
+                    quote!(Array<#inner>)
                 }
-                AbiType::RefObject(i) | AbiType::Object(i) => quote!(#(i)),
-                AbiType::Option(_) => todo!(),
-                AbiType::Result(_) => todo!(),
-                AbiType::RefFuture(_) => todo!(),
-                AbiType::Future(_) => quote!(Promise),
-                AbiType::RefStream(_) => todo!(),
-                AbiType::Stream(_) => todo!(),
+                AbiType::RefObject(i) | AbiType::Object(i) => {
+                    quote!(#(self.type_ident(i)))
+                }
+                AbiType::Option(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(#inner?)
+                }
+                AbiType::Result(i) => quote!(#(self.generate_return_type(Some(i)))),
+                AbiType::RefFuture(i) | AbiType::Future(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(Promise<#inner>)
+                }
+                AbiType::RefStream(i) | AbiType::Stream(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(ReadableStream<#inner>)
+                }
             }
         } else {
             quote!(void)
         }
     }
+
     fn generate_object(&self, obj: AbiObject) -> js::Tokens {
         quote! {
-            export class #(&obj.name) {
+            export class #(self.type_ident(&obj.name)) {
                 #(for method in obj.methods join (#<line>#<line>) => #(self.generate_function(method)))
 
                 drop(): void;
             }
         }
+    }
+
+    fn type_ident(&self, s: &str) -> String {
+        s.to_camel_case()
+    }
+
+    fn ident(&self, s: &str) -> String {
+        s.to_mixed_case()
     }
 }
 
@@ -496,6 +515,7 @@ impl JsGenerator {
             NumType::F64 => quote!(Float64Array),
         }
     }
+
     fn type_ident(&self, s: &str) -> String {
         s.to_camel_case()
     }
@@ -715,11 +735,10 @@ pub mod test_runner {
         let iface = Interface::parse(iface)?;
         let ts_gen = TsGenerator::default();
         let js_tokens = ts_gen.generate(iface);
+        let left = js_tokens.to_file_string().unwrap();
+        let right = ts_tokens.to_file_string().unwrap();
 
-        assert_eq!(
-            js_tokens.to_file_string().unwrap(),
-            ts_tokens.to_file_string().unwrap()
-        );
+        assert_eq!(left, right, "left: {}\nright: {}", left, right);
         Ok(())
     }
 }

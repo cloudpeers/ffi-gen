@@ -113,10 +113,10 @@ pub mod test_runner {
                     $crate::test_runner::compile_pass_js($iface, genco::quote!($($api)*), genco::quote!($($js)*)).unwrap();
                 }
 
-                /*#[test]
+                #[test]
                 fn ts() {
                     $crate::test_runner::compile_pass_ts($iface, genco::quote!($($ts)*)).unwrap();
-                }*/
+                }
             }
         }
     }

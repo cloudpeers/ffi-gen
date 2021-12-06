@@ -13,7 +13,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(): void;
+        helloWorld(): void;
 
         drop(): void;
     })
@@ -37,7 +37,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(): number;
+        helloWorld(): number;
 
         drop(): void;
     })
@@ -61,7 +61,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(arg: number): number;
+        helloWorld(arg: number): number;
 
         drop(): void;
     })
@@ -84,7 +84,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(arg: boolean): boolean;
+        helloWorld(arg: boolean): boolean;
 
         drop(): void;
     })
@@ -107,7 +107,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(arg: number): number;
+        helloWorld(arg: number): number;
 
         drop(): void;
     })
@@ -131,7 +131,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        hello_world(arg: number): number;
+        helloWorld(arg: number): number;
 
         drop(): void;
     })
@@ -219,7 +219,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        make_string(): string;
+        makeString(): string;
 
         drop(): void;
     })
@@ -248,7 +248,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        as_str(s: string): string;
+        asStr(s: string): string;
 
         drop(): void;
     }
@@ -279,7 +279,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        to_vec(b: Array<number>): Array<number>;
+        toVec(b: Array<number>): Array<number>;
 
         drop(): void;
     })
@@ -309,7 +309,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        to_vec(b: Array<BigInt>): Array<BigInt>;
+        toVec(b: Array<BigInt>): Array<BigInt>;
 
         drop(): void;
     })
@@ -336,7 +336,16 @@ compile_pass! {
         assert.equal(api.nonZero(0n), null);
         assert.equal(api.nonZero(42n), 42);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        nonZero(num: BigInt): BigInt?;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -376,7 +385,16 @@ compile_pass! {
         }
         assert.equal(err, true);
     ),
-    ( )
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        nonZero(num: BigInt): BigInt;
+
+        drop(): void;
+    })
 }
 
 compile_pass! {
@@ -494,5 +512,36 @@ compile_pass! {
         assert.equal(x, 0xffff_ffff);
         assert.equal(api.u32Identity(x), x);
     ),
-    ()
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        u64Min(): BigInt;
+
+        u64Max(): BigInt;
+
+        i64Min(): BigInt;
+
+        i64Max(): BigInt;
+
+        u32Min(): number;
+
+        u32Max(): number;
+
+        i32Min(): number;
+
+        i32Max(): number;
+
+        i32Identity(v: number): number;
+
+        i64Identity(v: BigInt): BigInt;
+
+        u32Identity(v: number): number;
+
+        u64Identity(v: BigInt): BigInt;
+
+        drop(): void;
+    })
 }
