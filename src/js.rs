@@ -485,7 +485,7 @@ impl JsGenerator {
                     #api.deallocate(#(self.var(ptr)), #(self.var(len)) * #(*size), #(*align));
                 }
             },
-            Instr::LowerString(in_, ptr, len, size, align) => quote! {
+            Instr::LowerString(in_, ptr, len, cap, size, align) => quote! {
                 const #(self.var(in_))_0 = new TextEncoder();
                 const #(self.var(in_))_1 = #(self.var(in_))_0.encode(#(self.var(in_)));
                 #(self.var(len)) = #(self.var(in_))_1.length;
@@ -493,6 +493,7 @@ impl JsGenerator {
                 const #(self.var(ptr))_0 =
                     new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
                 #(self.var(ptr))_0.set(#(self.var(in_))_1, 0);
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 const #(self.var(out))_0 =
@@ -500,13 +501,14 @@ impl JsGenerator {
                 const #(self.var(out))_1 = new TextDecoder();
                 const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
-            Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
+            Instr::LowerVec(in_, ptr, len, cap, ty, size, align) => quote! {
                 #(self.var(len)) = #(self.var(in_)).length;
                 #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
                 const #(self.var(ptr))_0 =
                     new #(self.generate_array(*ty))(
                         #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
                 #(self.var(ptr))_0.set(#(self.var(in_)), 0);
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 const #(self.var(out))_0 =
@@ -576,7 +578,6 @@ impl JsGenerator {
                 });
             },
             Instr::LiftTuple(_, _) => todo!(),
-            Instr::LowerTuple(_, _) => todo!(),
         }
     }
 
@@ -678,7 +679,7 @@ impl WasmMultiValueShim {
         iface
             .imports(&self.abi)
             .into_iter()
-            .filter_map(|import| match &import.ret {
+            .filter_map(|import| match &import.ffi_ret {
                 Return::Struct(fields, _) => {
                     let mut ret = String::new();
                     for field in fields {
