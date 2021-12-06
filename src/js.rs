@@ -399,15 +399,11 @@ impl JsGenerator {
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => quote!(this),
         };
-        let boxed = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(boxed,),
-            _ => quote!(),
-        };
         let func_name = self.ident(match &func.ty {
             FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => &ffi.symbol,
             _ => &func.name,
         });
-        let args = quote!(#(for (name, _) in &func.args => #(self.ident(name)),));
+        let args = quote!(#(for (name, _) in &ffi.abi_args => #(self.ident(name)),));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
         match &func.ty {
             FunctionType::Constructor(_) => quote! {
@@ -416,7 +412,7 @@ impl JsGenerator {
                 }
             },
             _ => quote! {
-                #func_name(#(boxed)#args) {
+                #func_name(#args) {
                     #body
                 }
             },
@@ -577,7 +573,14 @@ impl JsGenerator {
                     return #api.#(self.ident(poll))(a, b, c, d);
                 });
             },
-            Instr::LiftTuple(_, _) => todo!(),
+            Instr::LiftTuple(vars, out) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(const #(self.var(out)) = #(self.var(&vars[0]));),
+                _ => quote! {
+                    const #(self.var(out)) = [];
+                    #(for var in vars => #(self.var(out)).push(#(self.var(var)));)
+                },
+            },
         }
     }
 
@@ -684,10 +687,16 @@ impl WasmMultiValueShim {
                     let mut ret = String::new();
                     for field in fields {
                         let (size, _) = self.abi.layout(field.ty.num());
-                        if size > 4 {
-                            ret.push_str("i64 ");
-                        } else {
-                            ret.push_str("i32 ");
+                        match field.ty.num() {
+                            NumType::F32 => ret.push_str("f32 "),
+                            NumType::F64 => ret.push_str("f64 "),
+                            _ => {
+                                if size > 4 {
+                                    ret.push_str("i64 ");
+                                } else {
+                                    ret.push_str("i32 ");
+                                }
+                            }
                         }
                     }
                     Some(format!("\"{} {}\"", import.symbol, ret))
@@ -789,7 +798,7 @@ pub mod test_runner {
                     .expect("Compiling lib")
                     .success();
                 assert!(ret);
-                println!("{}", #_(#bin));
+                //println!("{}", #_(#bin));
                 #wasm_multi_value
                 let ret = Command::new("node")
                     .arg("--expose-gc")

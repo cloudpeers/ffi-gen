@@ -252,7 +252,7 @@ impl RustGenerator {
         // the first argument.
         quote! {
             #[no_mangle]
-            pub extern "C" fn #name(_: #(self.num_type(self.abi.iptr())), boxed: #(self.num_type(self.abi.iptr()))) {
+            pub extern "C" fn #name(_: #(self.ffi_num_type(self.abi.iptr())), boxed: #(self.ffi_num_type(self.abi.iptr()))) {
                 panic_abort(move || {
                     unsafe { Box::<#ty>::from_raw(boxed as *mut _) };
                 });
@@ -537,6 +537,25 @@ impl RustGenerator {
             NumType::I8 => quote!(i8),
             NumType::I16 => quote!(i16),
             NumType::I32 => quote!(i32),
+            NumType::I64 => quote!(i64),
+            NumType::F32 => quote!(f32),
+            NumType::F64 => quote!(f64),
+        }
+    }
+
+    fn ffi_num_type(&self, ty: NumType) -> rust::Tokens {
+        let is_wasm = match self.abi {
+            Abi::Wasm32 | Abi::Wasm64 => true,
+            _ => false,
+        };
+        match ty {
+            NumType::U8 if !is_wasm => quote!(u8),
+            NumType::U16 if !is_wasm => quote!(u16),
+            NumType::U8 | NumType::U16 | NumType::U32 => quote!(u32),
+            NumType::U64 => quote!(u64),
+            NumType::I8 if !is_wasm => quote!(i8),
+            NumType::I16 if !is_wasm => quote!(i16),
+            NumType::I8 | NumType::I16 | NumType::I32 => quote!(i32),
             NumType::I64 => quote!(i64),
             NumType::F32 => quote!(f32),
             NumType::F64 => quote!(f64),

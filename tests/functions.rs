@@ -580,7 +580,7 @@ compile_pass! {
         assert(tuple[1] == 99.0);
     ),
     (
-        const.tuple0();
+        api.tuple0();
         assert.equal(api.tuple1(42), 42);
         const tuple = api.tuple2(42, 99.0);
         assert.equal(tuple[0], 42);
