@@ -330,14 +330,13 @@ impl Abi {
             instr.push(Instr::DefineArgs(ffi_args.clone()));
         }
         instr.extend(instr_arg);
-        let abi_ret = if let Some(AbiType::Tuple(tuple)) = func.ret.as_ref() {
-            if tuple.is_empty() {
-                None
-            } else {
-                func.ret.clone()
-            }
-        } else {
-            func.ret.clone()
+        let abi_ret = match func.ret.as_ref() {
+            Some(AbiType::Option(inner)) | Some(AbiType::Result(inner)) => match &**inner {
+                AbiType::Tuple(tuple) if tuple.is_empty() => None,
+                _ => func.ret.clone(),
+            },
+            Some(AbiType::Tuple(tuple)) if tuple.is_empty() => None,
+            _ => func.ret.clone(),
         };
         let ret = abi_ret.as_ref().map(|ty| gen.gen(ty.clone()));
         instr.push(Instr::Call(symbol.clone(), ret.clone(), ffi_args.clone()));

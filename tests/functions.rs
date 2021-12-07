@@ -603,3 +603,45 @@ compile_pass! {
         identity(arg: number?): number?;
     })
 }
+
+compile_pass! {
+    no_args_ret_res_void,
+    "fn fallible() -> Result<()>;",
+    (
+        pub fn fallible() -> Result<(), &'static str> {
+            Ok(())
+        }
+    ),
+    ( ),
+    ( api.fallible(); ),
+    ( api.fallible(); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        fallible(): void;
+    })
+}
+
+compile_pass! {
+    no_args_ret_opt_void,
+    "fn fallible() -> Option<()>;",
+    (
+        pub fn fallible() -> Option<()> {
+            Some(())
+        }
+    ),
+    ( ),
+    ( api.fallible(); ),
+    ( api.fallible(); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        fallible(): void;
+    })
+}
