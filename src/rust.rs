@@ -506,7 +506,7 @@ impl RustGenerator {
 
     fn ty(&self, ty: &AbiType) -> rust::Tokens {
         match ty {
-            AbiType::Num(num) => self.num_type(*num),
+            AbiType::Num(num) => self.ffi_num_type(*num),
             AbiType::Isize => quote!(isize),
             AbiType::Usize => quote!(usize),
             AbiType::Bool => quote!(bool),
