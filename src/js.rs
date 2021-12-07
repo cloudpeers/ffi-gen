@@ -709,10 +709,10 @@ impl WasmMultiValueShim {
                             NumType::F64 => "f64 ",
                             _ if size > 4 => "i64 ",
                             _ => "i32 ",
-                            };
-                         ret.push_str(r);
-                        }
+                        };
+                        ret.push_str(r);
                     }
+
                     Some(format!("\"{} {}\"", import.symbol, ret))
                 }
                 _ => None,
