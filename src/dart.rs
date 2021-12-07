@@ -35,23 +35,37 @@ impl DartGenerator {
             import "dart:isolate";
             import "dart:typed_data";
 
-            ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
-                final dart = ffi.DynamicLibrary.executable();
-                final registerPtr = dart.lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(
-                    ffi.Handle, ffi.Pointer<ffi.Void>, ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
-                final register = registerPtr
-                    .asFunction<ffi.Pointer<ffi.Void> Function(
-                        Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
-                return register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+            class _DartApiEntry extends ffi.Struct {
+                external ffi.Pointer<ffi.Uint8> name;
+                external ffi.Pointer<ffi.Void> ptr;
             }
 
-            void _unregisterFinalizer(_Box boxed) {
-                final dart = ffi.DynamicLibrary.executable();
-                final unregisterPtr = dart.lookup<ffi.NativeFunction<ffi.Void Function(
-                    ffi.Pointer<ffi.Void>, ffi.Handle)>>("Dart_DeleteFinalizableHandle");
-                final unregister = unregisterPtr
-                    .asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
-                unregister(boxed._finalizer, boxed);
+            class _DartApi extends ffi.Struct {
+                @ffi.Int32()
+                external int major;
+
+                @ffi.Int32()
+                external int minor;
+
+                external ffi.Pointer<_DartApiEntry> functions;
+            }
+
+            ffi.Pointer<T> _lookupDartSymbol<T extends ffi.NativeType>(String symbol) {
+                final ffi.Pointer<_DartApi> api = ffi.NativeApi.initializeApiDLData.cast();
+                final ffi.Pointer<_DartApiEntry> functions = api.ref.functions;
+                for (var i = 0; i < 100; i++) {
+                    final func = functions.elementAt(i).ref;
+                    var symbol2 = "";
+                    var j = 0;
+                    while (func.name.elementAt(j).value != 0) {
+                        symbol2 += String.fromCharCode(func.name.elementAt(j).value);
+                        j += 1;
+                    }
+                    if (symbol == symbol2) {
+                        return func.ptr.cast();
+                    }
+                }
+                throw "symbol not found";
             }
 
             class _Box {
@@ -89,7 +103,7 @@ impl DartGenerator {
                         throw StateError("can't move value twice");
                     }
                     _moved = true;
-                    _unregisterFinalizer(this);
+                    _api._unregisterFinalizer(this);
                     return _ptr.address;
                 }
 
@@ -101,7 +115,7 @@ impl DartGenerator {
                         throw StateError("can't drop moved value");
                     }
                     _dropped = true;
-                    _unregisterFinalizer(this);
+                    _api._unregisterFinalizer(this);
                     _drop(ffi.Pointer.fromAddress(0), _ptr);
                 }
             }
@@ -231,6 +245,26 @@ impl DartGenerator {
                     }
                 }
 
+                late final _registerPtr = _lookupDartSymbol<
+                    ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(
+                        ffi.Handle, ffi.Pointer<ffi.Void>, ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
+
+                late final _register = _registerPtr.asFunction<
+                    ffi.Pointer<ffi.Void> Function(Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
+
+                ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
+                    return _register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+                }
+
+                late final _unregisterPtr = _lookupDartSymbol<
+                    ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Handle)>>("Dart_DeleteFinalizableHandle");
+
+                late final _unregister = _unregisterPtr.asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
+
+                void _unregisterFinalizer(_Box boxed) {
+                    _unregister(boxed._finalizer, boxed);
+                }
+
                 ffi.Pointer<T> __allocate<T extends ffi.NativeType>(int byteCount, int alignment) {
                     return _allocate(byteCount, alignment).cast();
                 }
@@ -349,7 +383,7 @@ impl DartGenerator {
             Instr::LiftObject(obj, box_, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = #obj._(#api, #(self.var(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #(self.ident(arg));),
@@ -455,19 +489,19 @@ impl DartGenerator {
             Instr::LiftIter(box_, next, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = Iter._(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(next))));
             },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
             },
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
             },
             Instr::LiftTuple(vars, out) => match vars.len() {
