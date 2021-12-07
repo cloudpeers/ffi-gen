@@ -1,6 +1,6 @@
 [package]
 name = "ffi-gen-macro"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "ffi-gen macro"
 repository = "https://github.com/cloudpeers/ffi-gen"
@@ -10,7 +10,7 @@ license = "MIT"
 proc-macro = true
 
 [dependencies]
-ffi-gen = { version = "0.1.0", path = ".." }
+ffi-gen = { version = "0.1.1", path = ".." }
 proc-macro2 = "1.0.32"
 quote = "1.0.10"
 syn = "1.0.81"
