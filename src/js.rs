@@ -133,7 +133,9 @@ impl TsGenerator {
                 AbiType::Tuple(tys) => match tys.len() {
                     0 => quote!(void),
                     1 => self.generate_return_type(Some(&tys[0])),
-                    _ => quote!([#(for ty in tys => #(self.generate_return_type(Some(ty))),)]),
+                    _ => {
+                        quote!([#(for ty in tys join (, ) => #(self.generate_return_type(Some(ty))))])
+                    }
                 },
             }
         } else {

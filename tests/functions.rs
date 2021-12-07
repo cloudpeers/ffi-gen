@@ -566,7 +566,7 @@ compile_pass! {
 
         tuple1(arg0: number): number;
 
-        tuple2(arg0: number, arg1: number): [number,number,];
+        tuple2(arg0: number, arg1: number): [number, number];
     })
 }
 
