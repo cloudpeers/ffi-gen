@@ -120,7 +120,7 @@ impl TsGenerator {
                 AbiType::Result(i) => quote!(#(self.generate_return_type(Some(i)))),
                 AbiType::RefIter(i) | AbiType::Iter(i) => {
                     let inner = self.generate_return_type(Some(i));
-                    quote!(Iterator<#inner>)
+                    quote!(Iterable<#inner>)
                 }
                 AbiType::RefFuture(i) | AbiType::Future(i) => {
                     let inner = self.generate_return_type(Some(i));
@@ -317,6 +317,18 @@ impl JsGenerator {
                 });
             };
 
+            function* nativeIter(box, nxt) {
+                let el;
+                while(true) {
+                    el = nxt(box.borrow());
+                    if (el === null) {
+                        break;
+                    }
+                    yield el;
+                }
+                box.drop();
+            }
+
             const nativeStream = (box, nativePoll) => {
                 const poll = (next, nextIdx, doneIdx) => {
                     const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));
@@ -401,7 +413,9 @@ impl JsGenerator {
             | FunctionType::PollStream(_, _) => quote!(this),
         };
         let func_name = self.ident(match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => &ffi.symbol,
+            FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _)
+            | &FunctionType::NextIter(_, _) => &ffi.symbol,
             _ => &func.name,
         });
         let args = quote!(#(for (name, _) in &ffi.abi_args => #(self.ident(name)),));
@@ -816,12 +830,13 @@ pub mod test_runner {
         let runner = runner_tokens.to_file_string()?;
         runner_file.write_all(runner.as_bytes())?;
 
-        js_file.keep()?;
-        rust_file.keep()?;
-        library_file.keep()?;
-        let (_, p) = runner_file.keep()?;
+        //        js_file.keep()?;
+        //        rust_file.keep()?;
+        //        library_file.keep()?;
+        //        let (_, p) = runner_file.keep()?;
         let test = TestCases::new();
-        test.pass(p);
+        //        test.pass(p);
+        test.pass(runner_file.as_ref());
         Ok(())
     }
 

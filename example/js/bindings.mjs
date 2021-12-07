@@ -146,6 +146,18 @@ const nativeFuture = (box, nativePoll) => {
   });
 };
 
+function* nativeIter(box, nxt) {
+  let el;
+  while (true) {
+    el = nxt(box.borrow());
+    if (el === null) {
+      break;
+    }
+    yield el;
+  }
+  box.drop();
+}
+
 const nativeStream = (box, nativePoll) => {
   const poll = (next, nextIdx, doneIdx) => {
     const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));

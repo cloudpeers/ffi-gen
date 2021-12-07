@@ -99,6 +99,8 @@ class Iter<T> extends Iterable<T> implements Iterator<T> {
   Iterator<T> get iterator => this;
 
   T? _current;
+
+  @override
   T get current => _current!;
 
   @override

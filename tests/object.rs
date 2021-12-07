@@ -135,17 +135,14 @@ compile_pass! {
         assert(res[1][0] == "world");*/
     ),
     (
-        const res = api.vecStr(); //["hello", "world"]);
+        const res = [];
+        let iter = api.vecStr();
+        for (const el of iter) {
+            res.push(el);
+        }
         assert(res.length == 2);
         assert(res[0] == "hello");
         assert(res[1] == "world");
-
-        /*const res = api.vecVecStr(); //[["hello"], ["world"]]);
-        assert(res.length == 2);
-        assert(res[0].length == 1);
-        assert(res[0][0] == "hello");
-        assert(res[1].length == 1);
-        assert(res[1][0] == "world");*/
     ),
     (
     export class Api {
@@ -153,7 +150,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        vecStr(arg: Array<string>): Array<string>;
+        vecStr(): Iterable<string>;
     })
 }
 
