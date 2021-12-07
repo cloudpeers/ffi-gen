@@ -704,16 +704,13 @@ impl WasmMultiValueShim {
                     let mut ret = String::new();
                     for field in fields {
                         let (size, _) = self.abi.layout(field.ty.num());
-                        match field.ty.num() {
-                            NumType::F32 => ret.push_str("f32 "),
-                            NumType::F64 => ret.push_str("f64 "),
-                            _ => {
-                                if size > 4 {
-                                    ret.push_str("i64 ");
-                                } else {
-                                    ret.push_str("i32 ");
-                                }
-                            }
+                        let r = match field.ty.num() {
+                            NumType::F32 => "f32 ",
+                            NumType::F64 => "f64 ",
+                            _ if size > 4 => "i64 ",
+                            _ => "i32 ",
+                            };
+                         ret.push_str(r);
                         }
                     }
                     Some(format!("\"{} {}\"", import.symbol, ret))
