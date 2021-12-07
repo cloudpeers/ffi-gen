@@ -146,6 +146,18 @@ const nativeFuture = (box, nativePoll) => {
   });
 };
 
+function* nativeIter(box, nxt) {
+  let el;
+  while (true) {
+    el = nxt(box.borrow());
+    if (el === null) {
+      break;
+    }
+    yield el;
+  }
+  box.drop();
+}
+
 const nativeStream = (box, nativePoll) => {
   const poll = (next, nextIdx, doneIdx) => {
     const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));
@@ -209,11 +221,14 @@ export class Api {
   }
   asyncHelloWorldFuturePoll(boxed, postCobject, port) {
     const tmp0 = boxed;
-    const tmp1 = tmp0;
     const tmp2 = postCobject;
-    const tmp3 = tmp2;
     const tmp4 = port;
-    const tmp5 = tmp4;
+    let tmp1 = 0;
+    let tmp3 = 0;
+    let tmp5 = 0;
+    tmp1 = tmp0;
+    tmp3 = tmp2;
+    tmp5 = tmp4;
     const tmp6 = this.instance.exports.__async_hello_world_future_poll(
       tmp1,
       tmp3,

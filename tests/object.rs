@@ -85,8 +85,6 @@ compile_pass! {
         create(value: number): CustomType;
 
         wasDropped(): boolean;
-
-        drop(): void;
     }
 
     export class CustomType {
@@ -97,6 +95,63 @@ compile_pass! {
         drop(): void;
     })
 
+}
+
+compile_pass! {
+    iterator,
+    r#"fn vec_str() -> Iterator<string>;
+    //fn vec_vec_str() -> Iterator<Iterator<string>>;
+    "#,
+    (
+        pub fn vec_str() -> Vec<String> {
+            vec!["hello".into(), "world".into()]
+        }
+
+        /*pub fn vec_vec_str() -> Vec<Vec<String>> {
+            vec![vec!["hello".into()], vec!["world".into()]]
+        }*/
+    ),
+    (
+        let iter = __vec_str();
+        assert_eq!(__vec_str_iter_next(iter).ret0, 1);
+        assert_eq!(__vec_str_iter_next(iter).ret0, 1);
+        assert_eq!(__vec_str_iter_next(iter).ret0, 0);
+        __vec_str_iter_drop(0, iter);
+    ),
+    (
+        final List<String> res = [];
+        for (final s in api.vecStr()) {
+            res.add(s);
+        }
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+
+        /*final res = api.vecVecStr(); //[["hello"], ["world"]]);
+        assert(res.length == 2);
+        assert(res[0].length == 1);
+        assert(res[0][0] == "hello");
+        assert(res[1].length == 1);
+        assert(res[1][0] == "world");*/
+    ),
+    (
+        const res = [];
+        let iter = api.vecStr();
+        for (const el of iter) {
+            res.push(el);
+        }
+        assert(res.length == 2);
+        assert(res[0] == "hello");
+        assert(res[1] == "world");
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        vecStr(): Iterable<string>;
+    })
 }
 
 compile_pass! {
@@ -127,8 +182,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(value: number): Promise<number>;
-
-        drop(): void;
     })
 }
 
@@ -205,8 +258,6 @@ compile_pass! {
         create(): Promise<BigInt>;
 
         wake(): void;
-
-        drop(): void;
     })
 }
 
@@ -281,8 +332,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(values: Array<number>): ReadableStream<number>;
-
-        drop(): void;
     })
 }
 
@@ -338,7 +387,5 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         create(value: number): Promise<number>;
-
-        drop(): void;
     })
 }

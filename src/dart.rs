@@ -35,23 +35,37 @@ impl DartGenerator {
             import "dart:isolate";
             import "dart:typed_data";
 
-            ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
-                final dart = ffi.DynamicLibrary.executable();
-                final registerPtr = dart.lookup<ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(
-                    ffi.Handle, ffi.Pointer<ffi.Void>, ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
-                final register = registerPtr
-                    .asFunction<ffi.Pointer<ffi.Void> Function(
-                        Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
-                return register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+            class _DartApiEntry extends ffi.Struct {
+                external ffi.Pointer<ffi.Uint8> name;
+                external ffi.Pointer<ffi.Void> ptr;
             }
 
-            void _unregisterFinalizer(_Box boxed) {
-                final dart = ffi.DynamicLibrary.executable();
-                final unregisterPtr = dart.lookup<ffi.NativeFunction<ffi.Void Function(
-                    ffi.Pointer<ffi.Void>, ffi.Handle)>>("Dart_DeleteFinalizableHandle");
-                final unregister = unregisterPtr
-                    .asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
-                unregister(boxed._finalizer, boxed);
+            class _DartApi extends ffi.Struct {
+                @ffi.Int32()
+                external int major;
+
+                @ffi.Int32()
+                external int minor;
+
+                external ffi.Pointer<_DartApiEntry> functions;
+            }
+
+            ffi.Pointer<T> _lookupDartSymbol<T extends ffi.NativeType>(String symbol) {
+                final ffi.Pointer<_DartApi> api = ffi.NativeApi.initializeApiDLData.cast();
+                final ffi.Pointer<_DartApiEntry> functions = api.ref.functions;
+                for (var i = 0; i < 100; i++) {
+                    final func = functions.elementAt(i).ref;
+                    var symbol2 = "";
+                    var j = 0;
+                    while (func.name.elementAt(j).value != 0) {
+                        symbol2 += String.fromCharCode(func.name.elementAt(j).value);
+                        j += 1;
+                    }
+                    if (symbol == symbol2) {
+                        return func.ptr.cast();
+                    }
+                }
+                throw "symbol not found";
             }
 
             class _Box {
@@ -89,7 +103,7 @@ impl DartGenerator {
                         throw StateError("can't move value twice");
                     }
                     _moved = true;
-                    _unregisterFinalizer(this);
+                    _api._unregisterFinalizer(this);
                     return _ptr.address;
                 }
 
@@ -101,8 +115,38 @@ impl DartGenerator {
                         throw StateError("can't drop moved value");
                     }
                     _dropped = true;
-                    _unregisterFinalizer(this);
+                    _api._unregisterFinalizer(this);
                     _drop(ffi.Pointer.fromAddress(0), _ptr);
+                }
+            }
+
+            class Iter<T> extends Iterable<T> implements Iterator<T> {
+                final _Box _box;
+                final T? Function(int) _next;
+
+                Iter._(this._box, this._next);
+
+                @override
+                Iterator<T> get iterator => this;
+
+                T? _current;
+
+                @override
+                T get current => _current!;
+
+                @override
+                bool moveNext() {
+                    final next = _next(_box.borrow());
+                    if (next == null) {
+                        return false;
+                    } else {
+                        _current = next;
+                        return true;
+                    }
+                }
+
+                void drop() {
+                    _box.drop();
                 }
             }
 
@@ -201,6 +245,26 @@ impl DartGenerator {
                     }
                 }
 
+                late final _registerPtr = _lookupDartSymbol<
+                    ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(
+                        ffi.Handle, ffi.Pointer<ffi.Void>, ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
+
+                late final _register = _registerPtr.asFunction<
+                    ffi.Pointer<ffi.Void> Function(Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
+
+                ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
+                    return _register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+                }
+
+                late final _unregisterPtr = _lookupDartSymbol<
+                    ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Handle)>>("Dart_DeleteFinalizableHandle");
+
+                late final _unregister = _unregisterPtr.asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
+
+                void _unregisterFinalizer(_Box boxed) {
+                    _unregister(boxed._finalizer, boxed);
+                }
+
                 ffi.Pointer<T> __allocate<T extends ffi.NativeType>(int byteCount, int alignment) {
                     return _allocate(byteCount, alignment).cast();
                 }
@@ -225,6 +289,7 @@ impl DartGenerator {
                 late final _deallocate = _deallocatePtr.asFunction<
                     void Function(ffi.Pointer<ffi.Uint8>, int, int)>();
 
+                #(for iter in iface.iterators() => #(self.generate_function(&iter.next())))
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
                 #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
 
@@ -233,7 +298,7 @@ impl DartGenerator {
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
 
-            #(for func in iface.imports(&self.abi) => #(self.generate_return_struct(&func.ret)))
+            #(for func in iface.imports(&self.abi) => #(self.generate_return_struct(&func.ffi_ret)))
         }
     }
 
@@ -262,22 +327,21 @@ impl DartGenerator {
             FunctionType::Constructor(_) => "api",
             FunctionType::Method(_) => "_api",
             FunctionType::Function
+            | FunctionType::NextIter(_, _)
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => "this",
         };
-        let boxed = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(int boxed,),
-            _ => quote!(),
-        };
         let name = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => {
+            FunctionType::NextIter(_, _)
+            | FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _) => {
                 format!("__{}", self.ident(&ffi.symbol))
             }
             _ => self.ident(&func.name),
         };
-        let args = quote!(#(for (name, ty) in &func.args => #(self.generate_type(ty)) #(self.ident(name)),));
+        let args = quote!(#(for (name, ty) in &ffi.abi_args => #(self.generate_type(ty)) #(self.ident(name)),));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(api, instr))));
-        let ret = if let Some(ret) = func.ret.as_ref() {
+        let ret = if let Some(ret) = ffi.abi_ret.as_ref() {
             self.generate_type(ret)
         } else {
             quote!(void)
@@ -293,7 +357,7 @@ impl DartGenerator {
             _ => {
                 quote! {
                     #doc
-                    #ret #name(#(boxed)#args) {
+                    #ret #name(#args) {
                         #body
                     }
                 }
@@ -303,37 +367,42 @@ impl DartGenerator {
 
     fn generate_instr(&self, api: &str, instr: &Instr) -> dart::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(final #(self.var(out)) = _box.borrow();),
-            Instr::BorrowObject(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_))._box.borrow();)
+            Instr::BorrowSelf(out) => quote!(#(self.var(out)) = _box.borrow();),
+            Instr::BorrowObject(in_, out)
+            | Instr::BorrowIter(in_, out)
+            | Instr::BorrowFuture(in_, out)
+            | Instr::BorrowStream(in_, out) => {
+                quote!(#(self.var(out)) = #(self.var(in_))._box.borrow();)
             }
             Instr::MoveObject(in_, out)
+            | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_))._box.move();)
+                quote!(#(self.var(out)) = #(self.var(in_))._box.move();)
             }
             Instr::LiftObject(obj, box_, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = #obj._(#api, #(self.var(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(final #(self.var(out)) = #(self.ident(arg));),
-            Instr::BindRets(ret, vars) => {
-                if vars.len() > 1 {
-                    quote! {
-                        #(for (idx, var) in vars.iter().enumerate() =>
-                            final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
-                    }
-                } else {
-                    quote!(final #(self.var(&vars[0])) = #(self.var(ret));)
-                }
+            Instr::BindRets(ret, vars) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(final #(self.var(&vars[0])) = #(self.var(ret));),
+                _ => quote! {
+                    #(for (idx, var) in vars.iter().enumerate() =>
+                        final #(self.var(var)) = #(self.var(ret)).#(format!("arg{}", idx));)
+                },
+            },
+            Instr::LowerNum(in_, out, _num) => {
+                quote!(#(self.var(out)) = #(self.var(in_));)
             }
-            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
+            Instr::LiftNum(in_, out, _num) => {
                 quote!(final #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(final #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
+                quote!(#(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => {
                 quote!(final #(self.var(out)) = #(self.var(in_)) > 0;)
@@ -345,26 +414,28 @@ impl DartGenerator {
                     #api.__deallocate(#(self.var(ptr))_0, #(self.var(len)) * #(*size), #(*align));
                 }
             },
-            Instr::LowerString(in_, ptr, len, size, align) => quote! {
+            Instr::LowerString(in_, ptr, len, cap, size, align) => quote! {
                 final #(self.var(in_))_0 = utf8.encode(#(self.var(in_)));
-                final #(self.var(len)) = #(self.var(in_))_0.length;
+                #(self.var(len)) = #(self.var(in_))_0.length;
                 final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 =
                     #api.__allocate(#(self.var(len)) * #(*size), #(*align));
                 final Uint8List #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
                 #(self.var(ptr))_1.setAll(0, #(self.var(in_))_0);
-                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 final ffi.Pointer<ffi.Uint8> #(self.var(ptr))_0 = ffi.Pointer.fromAddress(#(self.var(ptr)));
                 final #(self.var(out)) = utf8.decode(#(self.var(ptr))_0.asTypedList(#(self.var(len))));
             },
-            Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
-                final #(self.var(len)) = #(self.var(in_)).length;
+            Instr::LowerVec(in_, ptr, len, cap, ty, size, align) => quote! {
+                #(self.var(len)) = #(self.var(in_)).length;
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
                     #api.__allocate(#(self.var(len)) * #(*size), #(*align));
                 final #(self.var(ptr))_1 = #(self.var(ptr))_0.asTypedList(#(self.var(len)));
                 #(self.var(ptr))_1.setAll(0, #(self.var(in_)));
-                final #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(ptr)) = #(self.var(ptr))_0.address;
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 final ffi.Pointer<#(self.generate_native_num_type(*ty))> #(self.var(ptr))_0 =
@@ -384,11 +455,23 @@ impl DartGenerator {
                     invoke
                 }
             }
+            Instr::DefineArgs(vars) => quote! {
+                #(for var in vars => var #(self.var(var)) = #(self.literal(var.ty.num()));)
+            },
             Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
             Instr::HandleNull(var) => quote! {
                 if (#(self.var(var)) == 0) {
                     return null;
+                }
+            },
+            Instr::LowerOption(arg, var, some, some_instr) => quote! {
+                if (#(self.var(arg)) == null) {
+                    #(self.var(var)) = 0;
+                } else {
+                    #(self.var(var)) = 1;
+                    final #(self.var(some)) = #(self.var(arg));
+                    #(for inst in some_instr => #(self.generate_instr(api, inst)))
                 }
             },
             Instr::HandleError(var, ptr, len, cap) => quote! {
@@ -403,17 +486,31 @@ impl DartGenerator {
                     throw #(self.var(var))_0;
                 }
             },
+            Instr::LiftIter(box_, next, drop, out) => quote! {
+                final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
+                final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
+                final #(self.var(out)) = Iter._(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(next))));
+            },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeFuture(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
             },
             Instr::LiftStream(box_, poll, drop, out) => quote! {
                 final ffi.Pointer<ffi.Void> #(self.var(box_))_0 = ffi.Pointer.fromAddress(#(self.var(box_)));
                 final #(self.var(box_))_1 = _Box(#api, #(self.var(box_))_0, #_(#drop));
-                #(self.var(box_))_1._finalizer = _registerFinalizer(#(self.var(box_))_1);
+                #(self.var(box_))_1._finalizer = #api._registerFinalizer(#(self.var(box_))_1);
                 final #(self.var(out)) = _nativeStream(#(self.var(box_))_1, #api.#(format!("__{}", self.ident(poll))));
+            },
+            Instr::LiftTuple(vars, out) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(final #(self.var(out)) = #(self.var(&vars[0]));),
+                _ => quote! {
+                    final List #(self.var(out)) = [];
+                    #(for var in vars => #(self.var(out)).add(#(self.var(var)));)
+                },
             },
             Instr::LiftNumFromU32Tuple(..) => unreachable!(),
         }
@@ -423,13 +520,19 @@ impl DartGenerator {
         quote!(#(format!("tmp{}", var.binding)))
     }
 
+    fn literal(&self, ty: NumType) -> dart::Tokens {
+        match ty {
+            NumType::F32 | NumType::F64 => quote!(0.0),
+            _ => quote!(0),
+        }
+    }
+
     fn generate_wrapper(&self, func: Import) -> dart::Tokens {
         let native_args =
-            quote!(#(for var in &func.args => #(self.generate_native_num_type(var.ty.num())),));
-        let wrapped_args =
-            quote!(#(for var in &func.args => #(self.generate_wrapped_num_type(var.ty.num())),));
-        let native_ret = self.generate_native_return_type(&func.ret);
-        let wrapped_ret = self.generate_wrapped_return_type(&func.ret);
+            quote!(#(for var in &func.ffi_args => #(self.generate_native_num_type(var.ty.num())),));
+        let wrapped_args = quote!(#(for var in &func.ffi_args => #(self.generate_wrapped_num_type(var.ty.num())),));
+        let native_ret = self.generate_native_return_type(&func.ffi_ret);
+        let wrapped_ret = self.generate_wrapped_return_type(&func.ffi_ret);
         let symbol_ptr = format!("_{}Ptr", self.ident(&func.symbol));
         quote! {
             late final #(&symbol_ptr) =
@@ -449,13 +552,21 @@ impl DartGenerator {
             AbiType::RefSlice(ty) | AbiType::Vec(ty) => {
                 quote!(List<#(self.generate_wrapped_num_type(*ty))>)
             }
-            AbiType::Object(ty) | AbiType::RefObject(ty) => quote!(#ty),
             AbiType::Option(ty) => quote!(#(self.generate_type(&**ty))?),
             AbiType::Result(ty) => self.generate_type(&**ty),
-            AbiType::RefFuture(_) => todo!(),
-            AbiType::Future(_) => quote!(Future),
-            AbiType::RefStream(_) => todo!(),
-            AbiType::Stream(_) => quote!(Stream),
+            AbiType::Tuple(tuple) => match tuple.len() {
+                0 => quote!(void),
+                1 => self.generate_type(&tuple[0]),
+                _ => quote!(List<dynamic>),
+            },
+            AbiType::RefObject(ty) | AbiType::Object(ty) => quote!(#ty),
+            AbiType::RefIter(ty) | AbiType::Iter(ty) => quote!(Iter<#(self.generate_type(ty))>),
+            AbiType::RefFuture(ty) | AbiType::Future(ty) => {
+                quote!(Future<#(self.generate_type(ty))>)
+            }
+            AbiType::RefStream(ty) | AbiType::Stream(ty) => {
+                quote!(Stream<#(self.generate_type(ty))>)
+            }
         }
     }
 

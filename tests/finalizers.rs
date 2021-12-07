@@ -67,8 +67,6 @@ compile_pass! {
         makeBox(): CustomType;
 
         wasDropped(): boolean;
-
-        drop(): void;
     }
 
     export class CustomType {

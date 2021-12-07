@@ -11,27 +11,37 @@ import "dart:io" show Platform;
 import "dart:isolate";
 import "dart:typed_data";
 
-ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
-  final dart = ffi.DynamicLibrary.executable();
-  final registerPtr = dart.lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<ffi.Void> Function(ffi.Handle, ffi.Pointer<ffi.Void>,
-              ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
-  final register = registerPtr.asFunction<
-      ffi.Pointer<ffi.Void> Function(
-          Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
-  return register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+class _DartApiEntry extends ffi.Struct {
+  external ffi.Pointer<ffi.Uint8> name;
+  external ffi.Pointer<ffi.Void> ptr;
 }
 
-void _unregisterFinalizer(_Box boxed) {
-  final dart = ffi.DynamicLibrary.executable();
-  final unregisterPtr = dart.lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void>,
-              ffi.Handle)>>("Dart_DeleteFinalizableHandle");
-  final unregister =
-      unregisterPtr.asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
-  unregister(boxed._finalizer, boxed);
+class _DartApi extends ffi.Struct {
+  @ffi.Int32()
+  external int major;
+
+  @ffi.Int32()
+  external int minor;
+
+  external ffi.Pointer<_DartApiEntry> functions;
+}
+
+ffi.Pointer<T> _lookupDartSymbol<T extends ffi.NativeType>(String symbol) {
+  final ffi.Pointer<_DartApi> api = ffi.NativeApi.initializeApiDLData.cast();
+  final ffi.Pointer<_DartApiEntry> functions = api.ref.functions;
+  for (var i = 0; i < 100; i++) {
+    final func = functions.elementAt(i).ref;
+    var symbol2 = "";
+    var j = 0;
+    while (func.name.elementAt(j).value != 0) {
+      symbol2 += String.fromCharCode(func.name.elementAt(j).value);
+      j += 1;
+    }
+    if (symbol == symbol2) {
+      return func.ptr.cast();
+    }
+  }
+  throw "symbol not found";
 }
 
 class _Box {
@@ -72,7 +82,7 @@ class _Box {
       throw StateError("can't move value twice");
     }
     _moved = true;
-    _unregisterFinalizer(this);
+    _api._unregisterFinalizer(this);
     return _ptr.address;
   }
 
@@ -84,8 +94,38 @@ class _Box {
       throw StateError("can't drop moved value");
     }
     _dropped = true;
-    _unregisterFinalizer(this);
+    _api._unregisterFinalizer(this);
     _drop(ffi.Pointer.fromAddress(0), _ptr);
+  }
+}
+
+class Iter<T> extends Iterable<T> implements Iterator<T> {
+  final _Box _box;
+  final T? Function(int) _next;
+
+  Iter._(this._box, this._next);
+
+  @override
+  Iterator<T> get iterator => this;
+
+  T? _current;
+
+  @override
+  T get current => _current!;
+
+  @override
+  bool moveNext() {
+    final next = _next(_box.borrow());
+    if (next == null) {
+      return false;
+    } else {
+      _current = next;
+      return true;
+    }
+  }
+
+  void drop() {
+    _box.drop();
   }
 }
 
@@ -187,6 +227,31 @@ class Api {
     }
   }
 
+  late final _registerPtr = _lookupDartSymbol<
+      ffi.NativeFunction<
+          ffi.Pointer<ffi.Void> Function(ffi.Handle, ffi.Pointer<ffi.Void>,
+              ffi.IntPtr, ffi.Pointer<ffi.Void>)>>("Dart_NewFinalizableHandle");
+
+  late final _register = _registerPtr.asFunction<
+      ffi.Pointer<ffi.Void> Function(
+          Object, ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Void>)>();
+
+  ffi.Pointer<ffi.Void> _registerFinalizer(_Box boxed) {
+    return _register(boxed, boxed._ptr, 42, boxed._dropPtr.cast());
+  }
+
+  late final _unregisterPtr = _lookupDartSymbol<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<ffi.Void>,
+              ffi.Handle)>>("Dart_DeleteFinalizableHandle");
+
+  late final _unregister =
+      _unregisterPtr.asFunction<void Function(ffi.Pointer<ffi.Void>, _Box)>();
+
+  void _unregisterFinalizer(_Box boxed) {
+    _unregister(boxed._finalizer, boxed);
+  }
+
   ffi.Pointer<T> __allocate<T extends ffi.NativeType>(
       int byteCount, int alignment) {
     return _allocate(byteCount, alignment).cast();
@@ -205,12 +270,12 @@ class Api {
 
   /// Returns a future that prints a friendly
   /// greeting to stdout.
-  Future asyncHelloWorld() {
+  Future<int> asyncHelloWorld() {
     final tmp0 = _asyncHelloWorld();
     final tmp2 = tmp0;
     final ffi.Pointer<ffi.Void> tmp2_0 = ffi.Pointer.fromAddress(tmp2);
     final tmp2_1 = _Box(this, tmp2_0, "__async_hello_world_future_drop");
-    tmp2_1._finalizer = _registerFinalizer(tmp2_1);
+    tmp2_1._finalizer = this._registerFinalizer(tmp2_1);
     final tmp1 = _nativeFuture(tmp2_1, this.__asyncHelloWorldFuturePoll);
     return tmp1;
   }
@@ -236,11 +301,14 @@ class Api {
     int port,
   ) {
     final tmp0 = boxed;
-    final tmp1 = tmp0;
     final tmp2 = postCobject;
-    final tmp3 = tmp2;
     final tmp4 = port;
-    final tmp5 = tmp4;
+    var tmp1 = 0;
+    var tmp3 = 0;
+    var tmp5 = 0;
+    tmp1 = tmp0;
+    tmp3 = tmp2;
+    tmp5 = tmp4;
     final tmp6 = _asyncHelloWorldFuturePoll(
       tmp1,
       tmp3,

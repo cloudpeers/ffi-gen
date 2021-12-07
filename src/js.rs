@@ -64,9 +64,6 @@ impl TsGenerator {
               fetch(url, imports): Promise<void>;
 
               #(for func in iface.functions() join (#<line>#<line>) => #(self.generate_function(func)))
-
-              #(self.gen_doc(&["Drop the API"]))
-              drop(): void;
             }
 
             #(for obj in iface.objects() => #(self.generate_object(obj)))
@@ -74,8 +71,9 @@ impl TsGenerator {
     }
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
-        let args = quote!(#(for (name, ty) in &func.args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
-        let ret = self.generate_return_type(func.ret.as_ref());
+        let ffi = Abi::Wasm32.import(&func);
+        let args = quote!(#(for (name, ty) in &ffi.abi_args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
+        let ret = self.generate_return_type(ffi.abi_ret.as_ref());
         let name = self.ident(&func.name);
         let fun = match &func.ty {
             FunctionType::Constructor(_) => {
@@ -109,7 +107,6 @@ impl TsGenerator {
                 AbiType::Bool => quote!(boolean),
                 AbiType::RefStr | AbiType::String => quote!(string),
                 AbiType::RefSlice(prim) | AbiType::Vec(prim) => {
-                    // TODO String etcs
                     let inner = self.generate_return_type(Some(&AbiType::Num(*prim)));
                     quote!(Array<#inner>)
                 }
@@ -121,6 +118,10 @@ impl TsGenerator {
                     quote!(#inner?)
                 }
                 AbiType::Result(i) => quote!(#(self.generate_return_type(Some(i)))),
+                AbiType::RefIter(i) | AbiType::Iter(i) => {
+                    let inner = self.generate_return_type(Some(i));
+                    quote!(Iterable<#inner>)
+                }
                 AbiType::RefFuture(i) | AbiType::Future(i) => {
                     let inner = self.generate_return_type(Some(i));
                     quote!(Promise<#inner>)
@@ -129,6 +130,13 @@ impl TsGenerator {
                     let inner = self.generate_return_type(Some(i));
                     quote!(ReadableStream<#inner>)
                 }
+                AbiType::Tuple(tys) => match tys.len() {
+                    0 => quote!(void),
+                    1 => self.generate_return_type(Some(&tys[0])),
+                    _ => {
+                        quote!([#(for ty in tys join (, ) => #(self.generate_return_type(Some(ty))))])
+                    }
+                },
             }
         } else {
             quote!(void)
@@ -311,6 +319,18 @@ impl JsGenerator {
                 });
             };
 
+            function* nativeIter(box, nxt) {
+                let el;
+                while(true) {
+                    el = nxt(box.borrow());
+                    if (el === null) {
+                        break;
+                    }
+                    yield el;
+                }
+                box.drop();
+            }
+
             const nativeStream = (box, nativePoll) => {
                 const poll = (next, nextIdx, doneIdx) => {
                     const ret = nativePoll(box.borrow(), 0, BigInt(nextIdx), BigInt(doneIdx));
@@ -356,6 +376,7 @@ impl JsGenerator {
                 }
 
                 #(for func in iface.functions() => #(self.generate_function(&func)))
+                #(for iter in iface.iterators() => #(self.generate_function(&iter.next())))
                 #(for fut in iface.futures() => #(self.generate_function(&fut.poll())))
                 #(for stream in iface.streams() => #(self.generate_function(&stream.poll())))
             }
@@ -389,18 +410,17 @@ impl JsGenerator {
             FunctionType::Constructor(_) => quote!(api),
             FunctionType::Method(_) => quote!(this.api),
             FunctionType::Function
+            | FunctionType::NextIter(_, _)
             | FunctionType::PollFuture(_, _)
             | FunctionType::PollStream(_, _) => quote!(this),
         };
-        let boxed = match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => quote!(boxed,),
-            _ => quote!(),
-        };
         let func_name = self.ident(match &func.ty {
-            FunctionType::PollFuture(_, _) | FunctionType::PollStream(_, _) => &ffi.symbol,
+            FunctionType::PollFuture(_, _)
+            | FunctionType::PollStream(_, _)
+            | &FunctionType::NextIter(_, _) => &ffi.symbol,
             _ => &func.name,
         });
-        let args = quote!(#(for (name, _) in &func.args => #(self.ident(name)),));
+        let args = quote!(#(for (name, _) in &ffi.abi_args => #(self.ident(name)),));
         let body = quote!(#(for instr in &ffi.instr => #(self.generate_instr(&api, instr))));
         match &func.ty {
             FunctionType::Constructor(_) => quote! {
@@ -409,7 +429,7 @@ impl JsGenerator {
                 }
             },
             _ => quote! {
-                #func_name(#(boxed)#args) {
+                #func_name(#args) {
                     #body
                 }
             },
@@ -418,11 +438,15 @@ impl JsGenerator {
 
     fn generate_instr(&self, api: &js::Tokens, instr: &Instr) -> js::Tokens {
         match instr {
-            Instr::BorrowSelf(out) => quote!(const #(self.var(out)) = this.box.borrow();),
-            Instr::BorrowObject(in_, out) => {
+            Instr::BorrowSelf(out) => quote!(#(self.var(out)) = this.box.borrow();),
+            Instr::BorrowObject(in_, out)
+            | Instr::BorrowIter(in_, out)
+            | Instr::BorrowFuture(in_, out)
+            | Instr::BorrowStream(in_, out) => {
                 quote!(const #(self.var(out)) = #(self.var(in_)).box.borrow();)
             }
             Instr::MoveObject(in_, out)
+            | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
                 quote!(const #(self.var(out)) = #(self.var(in_)).box.move();)
@@ -459,13 +483,14 @@ impl JsGenerator {
             Instr::LiftNum(r#in, out, NumType::U32) => {
                 quote!(const #(self.var(out)) = #(self.var(r#in)) >>> 0;)
             }
-            // Casts below i32 are no ops as wasm only has i32 and i64
-            // TODO
-            Instr::LowerNum(in_, out, _num) | Instr::LiftNum(in_, out, _num) => {
+            Instr::LowerNum(in_, out, _num) => {
+                quote!(#(self.var(out)) = #(self.var(in_));)
+            }
+            Instr::LiftNum(in_, out, _num) => {
                 quote!(const #(self.var(out)) = #(self.var(in_));)
             }
             Instr::LowerBool(in_, out) => {
-                quote!(const #(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
+                quote!(#(self.var(out)) = #(self.var(in_)) ? 1 : 0;)
             }
             Instr::LiftBool(in_, out) => quote!(const #(self.var(out)) = #(self.var(in_)) > 0;),
             Instr::Deallocate(ptr, len, size, align) => quote! {
@@ -473,14 +498,15 @@ impl JsGenerator {
                     #api.deallocate(#(self.var(ptr)), #(self.var(len)) * #(*size), #(*align));
                 }
             },
-            Instr::LowerString(in_, ptr, len, size, align) => quote! {
+            Instr::LowerString(in_, ptr, len, cap, size, align) => quote! {
                 const #(self.var(in_))_0 = new TextEncoder();
                 const #(self.var(in_))_1 = #(self.var(in_))_0.encode(#(self.var(in_)));
-                const #(self.var(len)) = #(self.var(in_))_1.length;
-                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+                #(self.var(len)) = #(self.var(in_))_1.length;
+                #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
                 const #(self.var(ptr))_0 =
                     new Uint8Array(#api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
                 #(self.var(ptr))_0.set(#(self.var(in_))_1, 0);
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftString(ptr, len, out) => quote! {
                 const #(self.var(out))_0 =
@@ -488,13 +514,14 @@ impl JsGenerator {
                 const #(self.var(out))_1 = new TextDecoder();
                 const #(self.var(out)) = #(self.var(out))_1.decode(#(self.var(out))_0);
             },
-            Instr::LowerVec(in_, ptr, len, ty, size, align) => quote! {
-                const #(self.var(len)) = #(self.var(in_)).length;
-                const #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
+            Instr::LowerVec(in_, ptr, len, cap, ty, size, align) => quote! {
+                #(self.var(len)) = #(self.var(in_)).length;
+                #(self.var(ptr)) = #api.allocate(#(self.var(len)) * #(*size), #(*align));
                 const #(self.var(ptr))_0 =
                     new #(self.generate_array(*ty))(
                         #api.instance.exports.memory.buffer, #(self.var(ptr)), #(self.var(len)));
                 #(self.var(ptr))_0.set(#(self.var(in_)), 0);
+                #(self.var(cap)) = #(self.var(len));
             },
             Instr::LiftVec(ptr, len, out, ty) => quote! {
                 const #(self.var(out))_0 =
@@ -511,11 +538,23 @@ impl JsGenerator {
                     invoke
                 }
             }
+            Instr::DefineArgs(vars) => quote! {
+                #(for var in vars => let #(self.var(var)) = 0;)
+            },
             Instr::ReturnValue(ret) => quote!(return #(self.var(ret));),
             Instr::ReturnVoid => quote!(return;),
             Instr::HandleNull(var) => quote! {
                 if (#(self.var(var)) === 0) {
                     return null;
+                }
+            },
+            Instr::LowerOption(arg, var, some, some_instr) => quote! {
+                if (#(self.var(arg)) == null) {
+                    #(self.var(var)) = 0;
+                } else {
+                    #(self.var(var)) = 1;
+                    const #(self.var(some)) = #(self.var(arg));
+                    #(for inst in some_instr => #(self.generate_instr(api, inst)))
                 }
             },
             Instr::HandleError(var, ptr, len, cap) => quote! {
@@ -530,6 +569,13 @@ impl JsGenerator {
                     throw #(self.var(var))_2;
                 }
             },
+            Instr::LiftIter(box_, next, drop, out) => quote! {
+                const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
+                const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
+                const #(self.var(out)) = nativeIter(#(self.var(box_))_1, (a) => {
+                    return #api.#(self.ident(next))(a);
+                });
+            },
             Instr::LiftFuture(box_, poll, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
                 const #(self.var(box_))_1 = new Box(#(self.var(box_)), #(self.var(box_))_0);
@@ -543,6 +589,14 @@ impl JsGenerator {
                 const #(self.var(out)) = nativeStream(#(self.var(box_))_1, (a, b, c, d) => {
                     return #api.#(self.ident(poll))(a, b, c, d);
                 });
+            },
+            Instr::LiftTuple(vars, out) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(const #(self.var(out)) = #(self.var(&vars[0]));),
+                _ => quote! {
+                    const #(self.var(out)) = [];
+                    #(for var in vars => #(self.var(out)).push(#(self.var(var)));)
+                },
             },
         }
     }
@@ -645,17 +699,20 @@ impl WasmMultiValueShim {
         iface
             .imports(&self.abi)
             .into_iter()
-            .filter_map(|import| match &import.ret {
+            .filter_map(|import| match &import.ffi_ret {
                 Return::Struct(fields, _) => {
                     let mut ret = String::new();
                     for field in fields {
                         let (size, _) = self.abi.layout(field.ty.num());
-                        if size > 4 {
-                            ret.push_str("i64 ");
-                        } else {
-                            ret.push_str("i32 ");
-                        }
+                        let r = match field.ty.num() {
+                            NumType::F32 => "f32 ",
+                            NumType::F64 => "f64 ",
+                            _ if size > 4 => "i64 ",
+                            _ => "i32 ",
+                        };
+                        ret.push_str(r);
                     }
+
                     Some(format!("\"{} {}\"", import.symbol, ret))
                 }
                 _ => None,
@@ -772,12 +829,13 @@ pub mod test_runner {
         let runner = runner_tokens.to_file_string()?;
         runner_file.write_all(runner.as_bytes())?;
 
-        js_file.keep()?;
-        rust_file.keep()?;
-        library_file.keep()?;
-        let (_, p) = runner_file.keep()?;
+        //        js_file.keep()?;
+        //        rust_file.keep()?;
+        //        library_file.keep()?;
+        //        let (_, p) = runner_file.keep()?;
         let test = TestCases::new();
-        test.pass(p);
+        //        test.pass(p);
+        test.pass(runner_file.as_ref());
         Ok(())
     }
 

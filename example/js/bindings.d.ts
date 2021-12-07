@@ -32,9 +32,4 @@ export class Api {
    * greeting to stdout.
    */
   asyncHelloWorld(): Promise<number>;
-
-  /**
-   * Drop the API
-   */
-  drop(): void;
 }

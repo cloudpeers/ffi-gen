@@ -31,10 +31,13 @@ pub enum AbiType {
     Object(String),
     Option(Box<AbiType>),
     Result(Box<AbiType>),
+    RefIter(Box<AbiType>),
+    Iter(Box<AbiType>),
     RefFuture(Box<AbiType>),
     Future(Box<AbiType>),
     RefStream(Box<AbiType>),
     Stream(Box<AbiType>),
+    Tuple(Vec<AbiType>),
 }
 
 impl AbiType {
@@ -52,6 +55,7 @@ pub enum FunctionType {
     Constructor(String),
     Method(String),
     Function,
+    NextIter(String, AbiType),
     PollFuture(String, AbiType),
     PollStream(String, AbiType),
 }
@@ -72,6 +76,7 @@ impl AbiFunction {
                 format!("__{}_{}", object, &self.name)
             }
             FunctionType::Function => format!("__{}", &self.name),
+            FunctionType::NextIter(symbol, _) => format!("{}_iter_{}", symbol, &self.name),
             FunctionType::PollFuture(symbol, _) => format!("{}_future_{}", symbol, &self.name),
             FunctionType::PollStream(symbol, _) => format!("{}_stream_{}", symbol, &self.name),
         }
@@ -92,6 +97,24 @@ pub struct AbiObject {
     pub name: String,
     pub methods: Vec<AbiFunction>,
     pub destructor: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct AbiIter {
+    pub ty: AbiType,
+    pub symbol: String,
+}
+
+impl AbiIter {
+    pub fn next(&self) -> AbiFunction {
+        AbiFunction {
+            ty: FunctionType::NextIter(self.symbol.clone(), self.ty.clone()),
+            doc: vec![],
+            name: "next".to_string(),
+            args: vec![],
+            ret: Some(AbiType::Option(Box::new(self.ty.clone()))),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -273,6 +296,34 @@ impl Interface {
         funcs
     }
 
+    pub fn iterators(&self) -> Vec<AbiIter> {
+        let mut iterators = vec![];
+        let mut functions = self.functions();
+        for obj in self.objects() {
+            functions.extend(obj.methods);
+        }
+        for func in functions {
+            if let Some(ty) = func.ret.as_ref() {
+                let mut p = ty;
+                loop {
+                    match p {
+                        AbiType::Option(ty) | AbiType::Result(ty) => p = &**ty,
+                        AbiType::Iter(ty) => {
+                            let symbol = func.symbol();
+                            iterators.push(AbiIter {
+                                ty: (&**ty).clone(),
+                                symbol,
+                            });
+                            break;
+                        }
+                        _ => break,
+                    }
+                }
+            }
+        }
+        iterators
+    }
+
     pub fn futures(&self) -> Vec<AbiFuture> {
         let mut futures = vec![];
         let mut functions = self.functions();
@@ -339,6 +390,9 @@ impl Interface {
                 imports.push(abi.import(method));
             }
         }
+        for iter in self.iterators() {
+            imports.push(abi.import(&iter.next()));
+        }
         for fut in self.futures() {
             imports.push(abi.import(&fut.poll()));
         }
@@ -369,20 +423,38 @@ impl Interface {
                     AbiType::Num(ty) => AbiType::RefSlice(ty),
                     ty => unimplemented!("&{:?}", ty),
                 },
-                Type::Ident(ident) => AbiType::RefObject(ident.clone()),
+                Type::Ident(ident) => {
+                    if !self.is_object(ident) {
+                        panic!("unknown identifier {}", ident);
+                    }
+                    AbiType::RefObject(ident.clone())
+                }
                 ty => unimplemented!("&{:?}", ty),
             },
             Type::String => AbiType::String,
+            Type::Slice(_) => panic!("slice needs to be passed by reference"),
             Type::Vec(inner) => match self.to_type(inner) {
                 AbiType::Num(ty) => AbiType::Vec(ty),
                 ty => unimplemented!("Vec<{:?}>", ty),
             },
-            Type::Ident(ident) if self.is_object(ident) => AbiType::Object(ident.clone()),
-            Type::Option(ty) => AbiType::Option(Box::new(self.to_type(ty))),
+            Type::Ident(ident) => {
+                if !self.is_object(ident) {
+                    panic!("unknown identifier {}", ident);
+                }
+                AbiType::Object(ident.clone())
+            }
+            Type::Option(ty) => {
+                let inner = self.to_type(ty);
+                if let AbiType::Option(_) = inner {
+                    panic!("nested options are not supported");
+                }
+                AbiType::Option(Box::new(inner))
+            }
             Type::Result(ty) => AbiType::Result(Box::new(self.to_type(ty))),
+            Type::Iter(ty) => AbiType::Iter(Box::new(self.to_type(ty))),
             Type::Future(ty) => AbiType::Future(Box::new(self.to_type(ty))),
             Type::Stream(ty) => AbiType::Stream(Box::new(self.to_type(ty))),
-            ty => unimplemented!("{:?}", ty),
+            Type::Tuple(ty) => AbiType::Tuple(ty.iter().map(|ty| self.to_type(ty)).collect()),
         }
     }
 }

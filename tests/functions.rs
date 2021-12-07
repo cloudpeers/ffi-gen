@@ -14,8 +14,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(): void;
-
-        drop(): void;
     })
 
 }
@@ -38,8 +36,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(): number;
-
-        drop(): void;
     })
 
 }
@@ -62,8 +58,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 }
 
@@ -85,8 +79,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: boolean): boolean;
-
-        drop(): void;
     })
 }
 
@@ -108,8 +100,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 
 }
@@ -132,8 +122,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         helloWorld(arg: number): number;
-
-        drop(): void;
     })
 }
 
@@ -166,8 +154,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
-
-        drop(): void;
     })
 }
 
@@ -193,8 +179,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         strlen(arg: string): number;
-
-        drop(): void;
     })
 }
 
@@ -220,8 +204,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         makeString(): string;
-
-        drop(): void;
     })
 }
 
@@ -249,8 +231,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         asStr(s: string): string;
-
-        drop(): void;
     }
     )
 
@@ -280,8 +260,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         toVec(b: Array<number>): Array<number>;
-
-        drop(): void;
     })
 
 }
@@ -310,8 +288,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         toVec(b: Array<BigInt>): Array<BigInt>;
-
-        drop(): void;
     })
 }
 
@@ -343,8 +319,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         nonZero(num: BigInt): BigInt?;
-
-        drop(): void;
     })
 }
 
@@ -392,8 +366,6 @@ compile_pass! {
         fetch(url, imports): Promise<void>;
 
         nonZero(num: BigInt): BigInt;
-
-        drop(): void;
     })
 }
 
@@ -541,7 +513,135 @@ compile_pass! {
         u32Identity(v: number): number;
 
         u64Identity(v: BigInt): BigInt;
+    })
+}
 
-        drop(): void;
+compile_pass! {
+    tuples,
+    r#"fn tuple0(arg: ()) -> ();
+    fn tuple1(arg: (i32,)) -> (i32,);
+    fn tuple2(arg: (i32, f32)) -> (i32, f32);
+    "#,
+    (
+        pub fn tuple0(arg: ()) -> () {
+            arg
+        }
+
+        pub fn tuple1(arg: (i32,)) -> (i32,) {
+            arg
+        }
+
+        pub fn tuple2(arg: (i32, f32)) -> (i32, f32) {
+            arg
+        }
+    ),
+    (
+        __tuple0();
+        assert_eq!(__tuple1(42), 42);
+        let ret = __tuple2(42, 99.0);
+        assert_eq!(ret.ret0, 42);
+        assert_eq!(ret.ret1, 99.0);
+    ),
+    (
+        api.tuple0();
+        assert(api.tuple1(42) == 42);
+        final tuple = api.tuple2(42, 99.0);
+        assert(tuple[0] == 42);
+        assert(tuple[1] == 99.0);
+    ),
+    (
+        api.tuple0();
+        assert.equal(api.tuple1(42), 42);
+        const tuple = api.tuple2(42, 99.0);
+        assert.equal(tuple[0], 42);
+        assert.equal(tuple[1], 99.0);
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        tuple0(): void;
+
+        tuple1(arg0: number): number;
+
+        tuple2(arg0: number, arg1: number): [number, number];
+    })
+}
+
+compile_pass! {
+    arg_opt_i32_ret_opt_i32,
+    "fn identity(arg: Option<i32>) -> Option<i32>;",
+    (
+        pub fn identity(arg: Option<i32>) -> Option<i32> {
+            arg
+        }
+    ),
+    (
+        let ret = __identity(0, 0);
+        assert_eq!(ret.ret0, 0);
+        assert_eq!(ret.ret1, 0);
+        let ret = __identity(1, 42);
+        assert_eq!(ret.ret0, 1);
+        assert_eq!(ret.ret1, 42);
+    ),
+    (
+        assert(api.identity(null) == null);
+        assert(api.identity(42) == 42);
+    ),
+    (
+        assert.equal(api.identity(null), null);
+        assert.equal(api.identity(42), 42);
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        identity(arg: number?): number?;
+    })
+}
+
+compile_pass! {
+    no_args_ret_res_void,
+    "fn fallible() -> Result<()>;",
+    (
+        pub fn fallible() -> Result<(), &'static str> {
+            Ok(())
+        }
+    ),
+    ( ),
+    ( api.fallible(); ),
+    ( api.fallible(); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        fallible(): void;
+    })
+}
+
+compile_pass! {
+    no_args_ret_opt_void,
+    "fn fallible() -> Option<()>;",
+    (
+        pub fn fallible() -> Option<()> {
+            Some(())
+        }
+    ),
+    ( ),
+    ( api.fallible(); ),
+    ( api.fallible(); ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        fallible(): void;
     })
 }
