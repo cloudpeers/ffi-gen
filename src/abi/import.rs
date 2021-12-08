@@ -338,7 +338,7 @@ impl Abi {
             Some(AbiType::Tuple(tuple)) if tuple.is_empty() => None,
             _ => func.ret.clone(),
         };
-        let ret = abi_ret.as_ref().map(|ty| gen.gen(ty.clone()));
+        let ret = func.ret.as_ref().map(|ty| gen.gen(ty.clone()));
         instr.push(Instr::Call(symbol.clone(), ret.clone(), ffi_args.clone()));
         if let Some(ret) = ret {
             let out = gen.gen(ret.ty.clone());
@@ -354,7 +354,11 @@ impl Abi {
             instr.push(Instr::BindRets(ret.clone(), ffi_rets.clone()));
             instr.extend(instr_ret);
             instr.extend(instr_cleanup);
-            instr.push(Instr::ReturnValue(out));
+            if abi_ret.is_some() {
+                instr.push(Instr::ReturnValue(out));
+            } else {
+                instr.push(Instr::ReturnVoid);
+            }
         } else {
             instr.extend(instr_cleanup);
             instr.push(Instr::ReturnVoid);
