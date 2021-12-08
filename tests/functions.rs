@@ -606,31 +606,51 @@ compile_pass! {
 
 compile_pass! {
     no_args_ret_res_void,
-    "fn fallible() -> Result<()>;",
+    "fn fallible(arg: i32) -> Result<()>;",
     (
-        pub fn fallible() -> Result<(), &'static str> {
-            Ok(())
+        pub fn fallible(arg: i32) -> Result<(), &'static str> {
+            if arg > 0 {
+                Ok(())
+            } else {
+                Err("zero")
+            }
         }
     ),
     ( ),
-    ( api.fallible(); ),
-    ( api.fallible(); ),
+    (
+        api.fallible(42);
+        try {
+            api.fallible(0);
+        } catch(err) {
+        }
+    ),
+    (
+        api.fallible(42);
+        try {
+            api.fallible(0);
+        } catch(err) {
+        }
+    ),
     (
     export class Api {
         constructor();
 
         fetch(url, imports): Promise<void>;
 
-        fallible(): void;
+        fallible(arg: number): void;
     })
 }
 
-compile_pass! {
+/*compile_pass! {
     no_args_ret_opt_void,
-    "fn fallible() -> Option<()>;",
+    "fn fallible(arg: i32) -> Option<()>;",
     (
-        pub fn fallible() -> Option<()> {
-            Some(())
+        pub fn fallible(arg: i32) -> Option<()> {
+            if arg > 0 {
+                Some(())
+            } else {
+                None
+            }
         }
     ),
     ( ),
@@ -644,4 +664,4 @@ compile_pass! {
 
         fallible(): void;
     })
-}
+}*/
