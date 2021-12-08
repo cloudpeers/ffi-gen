@@ -457,16 +457,14 @@ impl JsGenerator {
                 const #(self.var(out)) = new #obj(#api, #(self.var(box_))_1);
             },
             Instr::BindArg(arg, out) => quote!(const #(self.var(out)) = #(self.ident(arg));),
-            Instr::BindRets(ret, vars) => {
-                if vars.len() > 1 {
-                    quote! {
-                        #(for (idx, var) in vars.iter().enumerate() =>
-                            const #(self.var(var)) = #(self.var(ret))[#(idx)];)
-                    }
-                } else {
-                    quote!(const #(self.var(&vars[0])) = #(self.var(ret));)
-                }
-            }
+            Instr::BindRets(ret, vars) => match vars.len() {
+                0 => quote!(),
+                1 => quote!(const #(self.var(&vars[0])) = #(self.var(ret));),
+                _ => quote! {
+                    #(for (idx, var) in vars.iter().enumerate() =>
+                        const #(self.var(var)) = #(self.var(ret))[#(idx)];)
+                },
+            },
             Instr::LiftNumFromU32Tuple(low, high, out, num_type) => {
                 let arr = match num_type {
                     NumType::U64 => quote!(BigUint64Array),
