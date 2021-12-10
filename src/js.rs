@@ -27,6 +27,82 @@ impl Default for TsGenerator {
     }
 }
 
+// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords
+static RESERVED_IDENTIFIERS: [&str; 64] = [
+    "abstract",
+    "arguments",
+    "await",
+    "boolean",
+    "break",
+    "byte",
+    "case",
+    "catch",
+    "char",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "eval",
+    "export",
+    "extends",
+    "false",
+    "final",
+    "finally",
+    "float",
+    "for",
+    "function",
+    "goto",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "int",
+    "interface",
+    "let",
+    "long",
+    "native",
+    "new",
+    "null",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "short",
+    "static",
+    "super",
+    "switch",
+    "synchronized",
+    "this",
+    "throw",
+    "throws",
+    "transient",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "volatile",
+    "while",
+    "with",
+    "yield",
+];
+
+fn sanitize_identifier(id: &str) -> String {
+    if RESERVED_IDENTIFIERS.contains(&id) {
+        format!("_{}", id)
+    } else {
+        id.to_string()
+    }
+}
+
 impl TsGenerator {
     fn gen_doc(
         &self,
@@ -154,11 +230,11 @@ impl TsGenerator {
     }
 
     fn type_ident(&self, s: &str) -> String {
-        s.to_camel_case()
+        sanitize_identifier(&s.to_camel_case())
     }
 
     fn ident(&self, s: &str) -> String {
-        s.to_mixed_case()
+        sanitize_identifier(&s.to_mixed_case())
     }
 }
 
@@ -619,11 +695,11 @@ impl JsGenerator {
     }
 
     fn type_ident(&self, s: &str) -> String {
-        s.to_camel_case()
+        sanitize_identifier(&s.to_camel_case())
     }
 
     fn ident(&self, s: &str) -> String {
-        s.to_mixed_case()
+        sanitize_identifier(&s.to_mixed_case())
     }
 }
 

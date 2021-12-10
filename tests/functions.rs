@@ -641,6 +641,27 @@ compile_pass! {
     })
 }
 
+compile_pass! {
+    js_sanitize_identifiers,
+    "fn fun(package: i32, await: bool);",
+    (
+        pub fn fun(_package: i32, _await: bool) {}
+    ),
+    ( ),
+    ( ),
+    (
+        api.fun(42, true);
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        fun(_package: number, _await: boolean): void;
+    })
+}
+
 /*compile_pass! {
     no_args_ret_opt_void,
     "fn fallible(arg: i32) -> Option<()>;",
