@@ -389,3 +389,42 @@ compile_pass! {
         create(value: number): Promise<number>;
     })
 }
+
+compile_pass! {
+    future_iterator,
+    "fn future_iterator() -> Future<Iterator<string>>;",
+    (
+        pub async fn future_iterator() -> Vec<String> {
+            vec!["hello".to_string(), "world".to_string()]
+        }
+    ),
+    ( ),
+    (
+        final iter = await api.futureIterator();
+        final list = [];
+        for (final item in iter) {
+            list.add(item);
+        }
+        assert(list.length == 2);
+        assert(list[0] == "hello");
+        assert(list[1] == "world");
+    ),
+    (
+        const iter = await api.futureIterator();
+        const list = [];
+        for (const item of iter) {
+            list.push(item);
+        }
+        assert.equal(list.length, 2);
+        assert.equal(list[0], "hello");
+        assert.equal(list[1], "world");
+    ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        futureIterator(): Promise<Iterable<string>>;
+    })
+}
