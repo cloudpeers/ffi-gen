@@ -632,13 +632,88 @@ impl DartGenerator {
     }
 
     fn type_ident(&self, s: &str) -> String {
-        s.to_camel_case()
+        sanitize_identifier(&s.to_camel_case())
     }
 
     fn ident(&self, s: &str) -> String {
-        s.to_mixed_case()
+        sanitize_identifier(&s.to_mixed_case())
     }
 }
+
+fn sanitize_identifier(id: &str) -> String {
+    if RESERVED_IDENTIFIERS.contains(&id) {
+        format!("{}_", id)
+    } else {
+        id.to_string()
+    }
+}
+
+// https://dart.dev/guides/language/language-tour#keywords
+static RESERVED_IDENTIFIERS: [&str; 63] = [
+    "abstract",
+    "as",
+    "assert",
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "covariant",
+    "default",
+    "deferred",
+    "do",
+    "dynamic",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "extension",
+    "external",
+    "factory",
+    "false",
+    "final",
+    "finally",
+    "for",
+    "Function",
+    "get",
+    "hide",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "interface",
+    "is",
+    "late",
+    "library",
+    "mixin",
+    "new",
+    "null",
+    "on",
+    "operator",
+    "part",
+    "required",
+    "rethrow",
+    "return",
+    "set",
+    "show",
+    "static",
+    "super",
+    "switch",
+    "sync",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typedef",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+];
 
 #[cfg(feature = "test_runner")]
 pub mod test_runner {
