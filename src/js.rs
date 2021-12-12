@@ -519,13 +519,13 @@ impl JsGenerator {
             | Instr::BorrowIter(in_, out)
             | Instr::BorrowFuture(in_, out)
             | Instr::BorrowStream(in_, out) => {
-                quote!(const #(self.var(out)) = #(self.var(in_)).box.borrow();)
+                quote!(#(self.var(out)) = #(self.var(in_)).box.borrow();)
             }
             Instr::MoveObject(in_, out)
             | Instr::MoveIter(in_, out)
             | Instr::MoveFuture(in_, out)
             | Instr::MoveStream(in_, out) => {
-                quote!(const #(self.var(out)) = #(self.var(in_)).box.move();)
+                quote!(#(self.var(out)) = #(self.var(in_)).box.move();)
             }
             Instr::LiftObject(obj, box_, drop, out) => quote! {
                 const #(self.var(box_))_0 = () => { #api.drop(#_(#drop), #(self.var(box_))); };
