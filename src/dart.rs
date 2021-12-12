@@ -120,6 +120,7 @@ impl DartGenerator {
                 }
             }
 
+            #(static_literal("///")) Implements Iterable and Iterator for a rust iterator.
             class Iter<T> extends Iterable<T> implements Iterator<T> {
                 final _Box _box;
                 final T? Function(int) _next;
