@@ -305,11 +305,19 @@ impl Interface {
         for func in functions {
             if let Some(ty) = func.ret.as_ref() {
                 let mut p = ty;
+                let mut symbol = func.symbol();
                 loop {
                     match p {
                         AbiType::Option(ty) | AbiType::Result(ty) => p = &**ty,
+                        AbiType::Future(ty) => {
+                            symbol.push_str("_future_poll");
+                            p = &**ty
+                        }
+                        AbiType::Stream(ty) => {
+                            symbol.push_str("_stream_poll");
+                            p = &**ty
+                        }
                         AbiType::Iter(ty) => {
-                            let symbol = func.symbol();
                             iterators.push(AbiIter {
                                 ty: (&**ty).clone(),
                                 symbol,

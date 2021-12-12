@@ -785,7 +785,7 @@ pub mod test_runner {
                     .unwrap()
                     .success();
                 assert!(ret);
-                //println!("{}", #_(#bin));
+                // println!("{}", #_(#bin));
                 let ret = Command::new("dart")
                     .env("LD_LIBRARY_PATH", #(quoted(library_dir.as_ref().to_str().unwrap())))
                     .arg("--enable-asserts")
