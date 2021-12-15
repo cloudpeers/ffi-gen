@@ -634,11 +634,11 @@ impl DartGenerator {
     }
 
     fn type_ident(&self, s: &str) -> String {
-        sanitize_identifier(&s.to_camel_case())
+        sanitize_identifier(&s.to_upper_camel_case())
     }
 
     fn ident(&self, s: &str) -> String {
-        sanitize_identifier(&s.to_mixed_case())
+        sanitize_identifier(&s.to_lower_camel_case())
     }
 }
 

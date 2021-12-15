@@ -174,13 +174,15 @@ Stream<T> _nativeStream<T>(
     }
   }
 
-  rx.listen((dynamic _message) => poll());
-  done.listen((dynamic _message) {
+  void close() {
     rx.close();
     done.close();
-    controller.close();
     box.drop();
-  });
+  }
+
+  controller.onCancel = close;
+  rx.listen((dynamic _message) => poll());
+  done.listen((dynamic _message) => controller.close());
   poll();
   return controller.stream;
 }
