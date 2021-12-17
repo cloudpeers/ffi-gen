@@ -236,7 +236,7 @@ impl DartGenerator {
                     if (Platform.isAndroid) name = #_(#("lib")#(&self.cdylib_name)#(".so"));
                     if (Platform.isMacOS) name = #_(#("lib")#(&self.cdylib_name)#(".dylib"));
                     if (Platform.isIOS) name = #_("");
-                    if (Platform.isWindows) #_(#(&self.cdylib_name)#(".dll"));
+                    if (Platform.isWindows) name = #_(#(&self.cdylib_name)#(".dll"));
                     if (name == null) {
                         throw UnsupportedError(#_("This platform is not supported."));
                     }
