@@ -27,5 +27,5 @@ object = { item_docs* ~ "object" ~ ident ~ "{" ~ function* ~ "}" }
 
 root = { SOI ~ module_docs* ~ (object | function)* ~ EOI }
 
-WHITESPACE = _{ " " | "\t" | "\n" }
+WHITESPACE = _{ " " | "\t" | "\n" | "\r" }
 COMMENT = _{ ("/*" ~ (!"*/" ~ ANY)* ~ "*/") | ("//" ~ !("/" | "!" | "\n") ~ (!"\n" ~ ANY)* ~ "\n") }
