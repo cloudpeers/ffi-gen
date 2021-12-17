@@ -718,6 +718,7 @@ static RESERVED_IDENTIFIERS: [&str; 63] = [
 ];
 
 #[cfg(feature = "test_runner")]
+#[doc(hidden)]
 pub mod test_runner {
     use super::*;
     use crate::{Abi, RustGenerator};

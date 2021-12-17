@@ -1,3 +1,8 @@
+//! # ffi-gen
+//!
+//! Call rust from any language.
+#![deny(missing_docs)]
+
 mod abi;
 mod dart;
 mod js;
@@ -18,27 +23,33 @@ use std::process::Command;
 
 pub use crate::abi::Abi;
 
+/// Main entry point to `ffi-gen`.
 pub struct FfiGen {
     iface: Interface,
 }
 
 impl FfiGen {
+    /// Takes a path to an ffi-gen interface description file and constructs
+    /// a new `FfiGen` instance.
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let s = std::fs::read_to_string(path)?;
         let iface = Interface::parse(&s)?;
         Ok(Self { iface })
     }
 
+    /// Generates the rust api.
     pub fn generate_rust(&self, abi: Abi) -> Result<String> {
         let rust = RustGenerator::new(abi);
         let rust = rust.generate(self.iface.clone()).to_file_string()?;
         Ok(rust)
     }
 
+    /// Patches the ffi functions in a wasm blob to use multi-value returns.
     pub fn wasm_multi_value_shim<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         WasmMultiValueShim::new().run(path, self.iface.clone())
     }
 
+    /// Generates dart bindings for the rust api.
     pub fn generate_dart<P: AsRef<Path>>(
         &self,
         path: P,
@@ -58,6 +69,7 @@ impl FfiGen {
         Ok(())
     }
 
+    /// Generates js bindings for the rust api.
     pub fn generate_js<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let js = JsGenerator::default();
         let js = js.generate(self.iface.clone()).to_file_string()?;
@@ -72,6 +84,7 @@ impl FfiGen {
         Ok(())
     }
 
+    /// Generates typescript type definitions for the js bindings.
     pub fn generate_ts<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let ts = TsGenerator::default();
         let ts = ts.generate(self.iface.clone()).to_file_string()?;
@@ -88,6 +101,7 @@ impl FfiGen {
 }
 
 #[cfg(feature = "test_runner")]
+#[doc(hidden)]
 pub mod test_runner {
     pub use crate::dart::test_runner::compile_pass as compile_pass_dart;
     pub use crate::js::test_runner::compile_pass as compile_pass_js;

@@ -283,7 +283,7 @@ impl Abi {
         }
     }
 
-    pub fn import(self, func: &AbiFunction) -> Import {
+    pub(crate) fn import(self, func: &AbiFunction) -> Import {
         let symbol = func.symbol();
         let mut gen = VarGen::new();
         let mut ffi_args = vec![];
