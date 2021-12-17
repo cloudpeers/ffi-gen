@@ -194,30 +194,35 @@ pub struct Var {
     pub ty: AbiType,
 }
 
+/// Abi type.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Abi {
+    /// Native 32bit
     Native32,
+    /// Native 64bit
     Native64,
+    /// Wasm 32bit
     Wasm32,
+    /// Wasm 64bit
     Wasm64,
 }
 
 impl Abi {
-    pub fn native() -> Self {
+    pub(crate) fn native() -> Self {
         #[cfg(target_pointer_width = "32")]
         return Abi::Native32;
         #[cfg(target_pointer_width = "64")]
         return Abi::Native64;
     }
 
-    pub fn uptr(self) -> NumType {
+    pub(crate) fn uptr(self) -> NumType {
         match self {
             Self::Native32 | Self::Wasm32 => NumType::U32,
             Self::Native64 | Self::Wasm64 => NumType::U64,
         }
     }
 
-    pub fn iptr(self) -> NumType {
+    pub(crate) fn iptr(self) -> NumType {
         match self {
             Self::Native32 | Self::Wasm32 => NumType::I32,
             Self::Native64 | Self::Wasm64 => NumType::I64,
@@ -225,7 +230,7 @@ impl Abi {
     }
 
     /// Returns the size and alignment of a primitive type.
-    pub fn layout(self, ty: NumType) -> (usize, usize) {
+    pub(crate) fn layout(self, ty: NumType) -> (usize, usize) {
         let size = match ty {
             NumType::U8 | NumType::I8 => 1,
             NumType::U16 | NumType::I16 => 2,

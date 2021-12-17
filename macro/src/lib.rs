@@ -1,8 +1,11 @@
+//! Macro for generating the rust api for a rust header file.
+#![deny(missing_docs)]
 use ffi_gen::{Abi, FfiGen};
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 
+/// Selects an abi based on the compile target and uses ffigen to generate the rust api.
 #[proc_macro]
 pub fn ffi_gen(input: TokenStream) -> TokenStream {
     let input: TokenStream2 = input.into();
@@ -17,21 +20,25 @@ pub fn ffi_gen(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+#[doc(hidden)]
 pub fn ffi_gen_wasm_32(input: TokenStream, _: TokenStream) -> TokenStream {
     inner_ffi_gen(input, Abi::Wasm32)
 }
 
 #[proc_macro_attribute]
+#[doc(hidden)]
 pub fn ffi_gen_wasm_64(input: TokenStream, _: TokenStream) -> TokenStream {
     inner_ffi_gen(input, Abi::Wasm64)
 }
 
 #[proc_macro_attribute]
+#[doc(hidden)]
 pub fn ffi_gen_native_32(input: TokenStream, _: TokenStream) -> TokenStream {
     inner_ffi_gen(input, Abi::Native32)
 }
 
 #[proc_macro_attribute]
+#[doc(hidden)]
 pub fn ffi_gen_native_64(input: TokenStream, _: TokenStream) -> TokenStream {
     inner_ffi_gen(input, Abi::Native64)
 }

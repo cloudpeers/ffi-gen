@@ -279,7 +279,7 @@ impl Abi {
         }
     }
 
-    pub fn export(self, func: &AbiFunction) -> Export {
+    pub(crate) fn export(self, func: &AbiFunction) -> Export {
         let mut gen = VarGen::new();
         let mut ffi_args = vec![];
         let mut ffi_ffi_rets = vec![];

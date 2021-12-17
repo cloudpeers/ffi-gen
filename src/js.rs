@@ -796,6 +796,7 @@ impl WasmMultiValueShim {
 }
 
 #[cfg(feature = "test_runner")]
+#[doc(hidden)]
 pub mod test_runner {
     use super::*;
     use crate::{Abi, RustGenerator};
