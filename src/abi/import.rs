@@ -21,6 +21,23 @@ impl Abi {
         instr_cleanup: &mut Vec<Instr>,
     ) {
         match &arg.ty {
+            AbiType::Num(num)
+                if matches!((self, num), (Abi::Wasm32, NumType::U64 | NumType::I64)) =>
+            {
+                let low = gen.gen_num(self.iptr());
+                let high = gen.gen_num(self.iptr());
+
+                let num_type = *num;
+                instr.push(Instr::LowerNumFromU32Tuple(
+                    arg,
+                    low.clone(),
+                    high.clone(),
+                    num_type,
+                ));
+
+                ffi_args.push(low);
+                ffi_args.push(high);
+            }
             AbiType::Num(num) => {
                 let out = gen.gen_num(*num);
                 instr.push(Instr::LowerNum(arg.clone(), out.clone(), *num));
@@ -380,6 +397,7 @@ pub enum Instr {
     Deallocate(Var, Var, usize, usize),
     LiftNum(Var, Var, NumType),
     LowerNum(Var, Var, NumType),
+    LowerNumFromU32Tuple(Var, Var, Var, NumType),
     LiftNumFromU32Tuple(Var, Var, Var, NumType),
     LiftBool(Var, Var),
     LowerBool(Var, Var),

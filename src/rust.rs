@@ -119,9 +119,13 @@ impl RustGenerator {
             fn ffi_waker(_post_cobject: isize, port: i64) -> Waker {
                 waker_fn(move || unsafe {
                     if cfg!(target_family = "wasm") {
+                        // FIXME
+                        //#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
+                        #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = window, js_name = __notifier_callback)]
                         extern "C" {
                             fn __notifier_callback(idx: i32);
                         }
+                        //panic!("calling notify");
                         __notifier_callback(port as _);
                     } else {
                         let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =
@@ -305,6 +309,12 @@ impl RustGenerator {
         match instr {
             Instr::LiftNum(in_, out) | Instr::LiftIsize(in_, out) | Instr::LiftUsize(in_, out) => {
                 quote!(let #(self.var(out)) = #(self.var(in_)) as _;)
+            }
+            Instr::LiftNumAsU32Tuple(in_low, in_high, out, num_type) => {
+                let ty = self.num_type(*num_type);
+                quote! {
+                   let #(self.var(out)) = #(ty.clone())::from(#(self.var(in_low))) | (#ty::from(#(self.var(in_high))) << 32);
+                }
             }
             Instr::LowerNumAsU32Tuple(r#in, low, high, _num_type) => {
                 quote! {

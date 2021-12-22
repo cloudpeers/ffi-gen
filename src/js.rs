@@ -271,10 +271,12 @@ impl JsGenerator {
             let ReadableStream;
             if (typeof window == "object") {
                 ReadableStream = window.ReadableStream;
+                window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             } else {
                 import("node:stream/web").then(pkg => {
                     ReadableStream = pkg.ReadableStream;
                 });
+                global.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             };
 
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
@@ -439,6 +441,10 @@ impl JsGenerator {
                     this.instance = await fetchAndInstantiate(url, imports);
                 }
 
+                initWithInstance(instance) {
+                    this.instance = instance;
+                }
+
                 allocate(size, align) {
                     return this.instance.exports.allocate(size, align);
                 }
@@ -557,8 +563,25 @@ impl JsGenerator {
             Instr::LiftNum(r#in, out, NumType::U32) => {
                 quote!(const #(self.var(out)) = #(self.var(r#in)) >>> 0;)
             }
+            Instr::LowerNumFromU32Tuple(r#in, out_low, out_high, num_type) => {
+                let arr = match num_type {
+                    NumType::U64 => quote!(BigUint64Array),
+                    NumType::I64 => quote!(BigInt64Array),
+                    _ => unreachable!(),
+                };
+                quote! {
+                    const #(self.var(out_low))_0 = new #(arr)(1);
+                    #(self.var(out_low))_0[0] = #(self.var(r#in));
+                    const #(self.var(out_low))_1 = new Uint32Array(#(self.var(out_low))_0.buffer);
+                    #(self.var(out_low)) = #(self.var(out_low))_1[0];
+                    #(self.var(out_high)) = #(self.var(out_low))_1[1];
+                }
+            }
             Instr::LowerNum(in_, out, _num) => {
-                quote!(#(self.var(out)) = #(self.var(in_));)
+                quote! {
+                console.log("lowering", #(self.var(in_)), #(self.var(out)));
+                #(self.var(out)) = #(self.var(in_));
+                }
             }
             Instr::LiftNum(in_, out, _num) => {
                 quote!(const #(self.var(out)) = #(self.var(in_));)
