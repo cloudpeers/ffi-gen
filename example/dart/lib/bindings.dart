@@ -218,7 +218,7 @@ class Api {
     if (Platform.isLinux) name = "libapi.so";
     if (Platform.isAndroid) name = "libapi.so";
     if (Platform.isMacOS) name = "libapi.dylib";
-    if (Platform.isIOS) name = "\"\"";
+    if (Platform.isIOS) name = "";
     if (Platform.isWindows) name = "api.dll";
     if (name == null) {
       throw UnsupportedError("\"This platform is not supported.\"");
