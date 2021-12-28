@@ -778,7 +778,7 @@ impl WasmMultiValueShim {
             }
             let status = cmd.status()?;
             if !status.success() {
-                anyhow::bail!("multi-value-reverse-polyfill failed");
+                anyhow::bail!("multi-value-reverse-polyfill failed for: {:?}", cmd);
             }
         } else {
             let status = Command::new("cp")
@@ -810,7 +810,7 @@ impl WasmMultiValueShim {
                         ret.push_str(r);
                     }
 
-                    Some(format!("\"{} {}\"", import.symbol, ret))
+                    Some(format!("{} {}", import.symbol, ret))
                 }
                 _ => None,
             })
