@@ -15,6 +15,15 @@ impl RustGenerator {
     }
 
     pub fn generate(&self, iface: Interface) -> rust::Tokens {
+        let wasm_bindgen: rust::Tokens = if cfg!(feature = "wasm-bindgen") {
+            quote! {
+                // Workaround for combined use with `wasm-bindgen`, so we don't have to
+                // patch the `importObject` while loading the WASM module.
+                #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = window, js_name = __notifier_callback)]
+            }
+        } else {
+            quote!()
+        };
         quote! {
         #[allow(unused)]
         mod api {
@@ -119,13 +128,10 @@ impl RustGenerator {
             fn ffi_waker(_post_cobject: isize, port: i64) -> Waker {
                 waker_fn(move || unsafe {
                     if cfg!(target_family = "wasm") {
-                        // FIXME
-                        //#[cfg_attr(feature = "wasm", wasm_bindgen::prelude::wasm_bindgen)]
-                        #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = window, js_name = __notifier_callback)]
+                        #(wasm_bindgen)
                         extern "C" {
                             fn __notifier_callback(idx: i32);
                         }
-                        //panic!("calling notify");
                         __notifier_callback(port as _);
                     } else {
                         let post_cobject: extern "C" fn(i64, *const core::ffi::c_void) =

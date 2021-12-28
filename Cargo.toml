@@ -10,6 +10,7 @@ repository = "https://github.com/cloudpeers/ffi-gen"
 license = "MIT"
 
 [features]
+default = []
 test_runner = ["tempfile", "trybuild"]
 
 [dependencies]
@@ -20,7 +21,10 @@ pest = "2.1.3"
 pest_derive = "2.1.0"
 tempfile = { version = "3.2.0", optional = true }
 trybuild = { version = "1.0.53", optional = true }
-wasm-bindgen = "0.2.78"
+
+[dependencies.wasm-bindgen]
+version = "0.2.78"
+optional = true
 
 [dev-dependencies]
 ffi-gen = { path = ".", features = ["test_runner"] }

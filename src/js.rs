@@ -271,11 +271,15 @@ impl JsGenerator {
             let ReadableStream;
             if (typeof window == "object") {
                 ReadableStream = window.ReadableStream;
+                #(static_literal("// Workaround for combined use with `wasm-bindgen`, so we don't have to"))
+                #(static_literal("// patch the `importObject` while loading the WASM module."))
                 window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             } else {
                 import("node:stream/web").then(pkg => {
                     ReadableStream = pkg.ReadableStream;
                 });
+                #(static_literal("// Workaround for combined use with `wasm-bindgen`, so we don't have to"))
+                #(static_literal("// patch the `importObject` while loading the WASM module."))
                 global.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             };
 
@@ -927,13 +931,13 @@ pub mod test_runner {
         let runner = runner_tokens.to_file_string()?;
         runner_file.write_all(runner.as_bytes())?;
 
-        //        js_file.keep()?;
-        //        rust_file.keep()?;
-        //        library_file.keep()?;
-        //        let (_, p) = runner_file.keep()?;
+        js_file.keep()?;
+        rust_file.keep()?;
+        library_file.keep()?;
+        let (_, p) = runner_file.keep()?;
         let test = TestCases::new();
-        //        test.pass(p);
-        test.pass(runner_file.as_ref());
+        test.pass(p);
+        //test.pass(runner_file.as_ref());
         Ok(())
     }
 
