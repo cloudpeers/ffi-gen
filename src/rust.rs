@@ -19,7 +19,7 @@ impl RustGenerator {
             quote! {
                 // Workaround for combined use with `wasm-bindgen`, so we don't have to
                 // patch the `importObject` while loading the WASM module.
-                #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = window, js_name = __notifier_callback)]
+                #[cfg_attr(target_family = "wasm", wasm_bindgen::prelude::wasm_bindgen(js_namespace = window, js_name = __notifier_callback))]
             }
         } else {
             quote!()
