@@ -237,9 +237,7 @@ export class Api {
     let tmp3 = 0;
     let tmp5 = 0;
     let tmp6 = 0;
-    console.log("lowering", tmp0, tmp1);
     tmp1 = tmp0;
-    console.log("lowering", tmp2, tmp3);
     tmp3 = tmp2;
     const tmp5_0 = new BigInt64Array(1);
     tmp5_0[0] = tmp4;
