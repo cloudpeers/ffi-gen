@@ -752,7 +752,7 @@ impl WasmMultiValueShim {
             quote! {
                 let ret = Command::new("multi-value-reverse-polyfill")
                     .arg(#_(#path))
-                    #(for arg in args => .arg(#arg))
+                    #(for arg in args => .arg(#(quoted(arg))))
                     .status()
                     .unwrap()
                     .success();
@@ -931,13 +931,13 @@ pub mod test_runner {
         let runner = runner_tokens.to_file_string()?;
         runner_file.write_all(runner.as_bytes())?;
 
-        js_file.keep()?;
-        rust_file.keep()?;
-        library_file.keep()?;
-        let (_, p) = runner_file.keep()?;
+        //        js_file.keep()?;
+        //        rust_file.keep()?;
+        //        library_file.keep()?;
+        //        let (_, p) = runner_file.keep()?;
         let test = TestCases::new();
-        test.pass(p);
-        //test.pass(runner_file.as_ref());
+        //        test.pass(p);
+        test.pass(runner_file.as_ref());
         Ok(())
     }
 
