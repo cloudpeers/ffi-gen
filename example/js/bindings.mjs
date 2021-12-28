@@ -22,10 +22,16 @@ const fetch_polyfill = async (file) => {
 let ReadableStream;
 if (typeof window == "object") {
   ReadableStream = window.ReadableStream;
+  // Workaround for combined use with `wasm-bindgen`, so we don't have to
+  // patch the `importObject` while loading the WASM module.
+  window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
 } else {
   import("node:stream/web").then((pkg) => {
     ReadableStream = pkg.ReadableStream;
   });
+  // Workaround for combined use with `wasm-bindgen`, so we don't have to
+  // patch the `importObject` while loading the WASM module.
+  global.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
 }
 
 const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
@@ -191,6 +197,10 @@ export class Api {
     this.instance = await fetchAndInstantiate(url, imports);
   }
 
+  initWithInstance(instance) {
+    this.instance = instance;
+  }
+
   allocate(size, align) {
     return this.instance.exports.allocate(size, align);
   }
@@ -226,38 +236,44 @@ export class Api {
     let tmp1 = 0;
     let tmp3 = 0;
     let tmp5 = 0;
+    let tmp6 = 0;
     tmp1 = tmp0;
     tmp3 = tmp2;
-    tmp5 = tmp4;
-    const tmp6 = this.instance.exports.__async_hello_world_future_poll(
+    const tmp5_0 = new BigInt64Array(1);
+    tmp5_0[0] = tmp4;
+    const tmp5_1 = new Uint32Array(tmp5_0.buffer);
+    tmp5 = tmp5_1[0];
+    tmp6 = tmp5_1[1];
+    const tmp7 = this.instance.exports.__async_hello_world_future_poll(
       tmp1,
       tmp3,
-      tmp5
+      tmp5,
+      tmp6
     );
-    const tmp8 = tmp6[0];
-    const tmp9 = tmp6[1];
-    const tmp10 = tmp6[2];
-    const tmp11 = tmp6[3];
-    const tmp12 = tmp6[4];
-    const tmp13 = tmp6[5];
-    if (tmp8 === 0) {
+    const tmp9 = tmp7[0];
+    const tmp10 = tmp7[1];
+    const tmp11 = tmp7[2];
+    const tmp12 = tmp7[3];
+    const tmp13 = tmp7[4];
+    const tmp14 = tmp7[5];
+    if (tmp9 === 0) {
       return null;
     }
-    if (tmp9 === 0) {
-      const tmp9_0 = new Uint8Array(
+    if (tmp10 === 0) {
+      const tmp10_0 = new Uint8Array(
         this.instance.exports.memory.buffer,
-        tmp10,
-        tmp11
+        tmp11,
+        tmp12
       );
-      const tmp9_1 = new TextDecoder();
-      const tmp9_2 = tmp9_1.decode(tmp9_0);
-      if (tmp11 > 0) {
-        this.deallocate(tmp10, tmp12, 1);
+      const tmp10_1 = new TextDecoder();
+      const tmp10_2 = tmp10_1.decode(tmp10_0);
+      if (tmp12 > 0) {
+        this.deallocate(tmp11, tmp13, 1);
       }
-      throw tmp9_2;
+      throw tmp10_2;
     }
-    const tmp7 = tmp13;
-    return tmp7;
+    const tmp8 = tmp14;
+    return tmp8;
   }
 }
 

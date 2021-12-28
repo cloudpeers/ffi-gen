@@ -271,10 +271,16 @@ impl JsGenerator {
             let ReadableStream;
             if (typeof window == "object") {
                 ReadableStream = window.ReadableStream;
+                #(static_literal("// Workaround for combined use with `wasm-bindgen`, so we don't have to"))
+                #(static_literal("// patch the `importObject` while loading the WASM module."))
+                window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             } else {
                 import("node:stream/web").then(pkg => {
                     ReadableStream = pkg.ReadableStream;
                 });
+                #(static_literal("// Workaround for combined use with `wasm-bindgen`, so we don't have to"))
+                #(static_literal("// patch the `importObject` while loading the WASM module."))
+                global.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             };
 
             const fetchFn = (typeof fetch === "function" && fetch) || fetch_polyfill;
@@ -439,6 +445,10 @@ impl JsGenerator {
                     this.instance = await fetchAndInstantiate(url, imports);
                 }
 
+                initWithInstance(instance) {
+                    this.instance = instance;
+                }
+
                 allocate(size, align) {
                     return this.instance.exports.allocate(size, align);
                 }
@@ -556,6 +566,20 @@ impl JsGenerator {
             }
             Instr::LiftNum(r#in, out, NumType::U32) => {
                 quote!(const #(self.var(out)) = #(self.var(r#in)) >>> 0;)
+            }
+            Instr::LowerNumFromU32Tuple(r#in, out_low, out_high, num_type) => {
+                let arr = match num_type {
+                    NumType::U64 => quote!(BigUint64Array),
+                    NumType::I64 => quote!(BigInt64Array),
+                    _ => unreachable!(),
+                };
+                quote! {
+                    const #(self.var(out_low))_0 = new #(arr)(1);
+                    #(self.var(out_low))_0[0] = #(self.var(r#in));
+                    const #(self.var(out_low))_1 = new Uint32Array(#(self.var(out_low))_0.buffer);
+                    #(self.var(out_low)) = #(self.var(out_low))_1[0];
+                    #(self.var(out_high)) = #(self.var(out_low))_1[1];
+                }
             }
             Instr::LowerNum(in_, out, _num) => {
                 quote!(#(self.var(out)) = #(self.var(in_));)
@@ -725,7 +749,7 @@ impl WasmMultiValueShim {
             quote! {
                 let ret = Command::new("multi-value-reverse-polyfill")
                     .arg(#_(#path))
-                    #(for arg in args => .arg(#arg))
+                    #(for arg in args => .arg(#(quoted(arg))))
                     .status()
                     .unwrap()
                     .success();
@@ -755,7 +779,7 @@ impl WasmMultiValueShim {
             }
             let status = cmd.status()?;
             if !status.success() {
-                anyhow::bail!("multi-value-reverse-polyfill failed");
+                anyhow::bail!("multi-value-reverse-polyfill failed for: {:?}", cmd);
             }
         } else {
             let status = Command::new("cp")
@@ -787,7 +811,7 @@ impl WasmMultiValueShim {
                         ret.push_str(r);
                     }
 
-                    Some(format!("\"{} {}\"", import.symbol, ret))
+                    Some(format!("{} {}", import.symbol, ret))
                 }
                 _ => None,
             })

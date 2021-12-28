@@ -514,7 +514,7 @@ impl DartGenerator {
                     #(for var in vars => #(self.var(out)).add(#(self.var(var)));)
                 },
             },
-            Instr::LiftNumFromU32Tuple(..) => unreachable!(),
+            Instr::LiftNumFromU32Tuple(..) | Instr::LowerNumFromU32Tuple(..) => unreachable!(),
         }
     }
 

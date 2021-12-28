@@ -18,6 +18,15 @@ impl Abi {
         ffi_args: &mut Vec<Var>,
     ) {
         match &out.ty {
+            AbiType::Num(num)
+                if matches!((self, num), (Abi::Wasm32, NumType::U64 | NumType::I64)) =>
+            {
+                let num_type = *num;
+                let low = gen.gen_num(NumType::U32);
+                let high = gen.gen_num(NumType::U32);
+                ffi_args.extend_from_slice(&[low.clone(), high.clone()]);
+                instr.push(Instr::LiftNumAsU32Tuple(low, high, out, num_type));
+            }
             AbiType::Num(num) => {
                 let arg = gen.gen_num(*num);
                 ffi_args.push(arg.clone());
@@ -349,6 +358,7 @@ impl Abi {
 #[derive(Clone, Debug)]
 pub enum Instr {
     LiftNum(Var, Var),
+    LiftNumAsU32Tuple(Var, Var, Var, NumType),
     LowerNum(Var, Var),
     LowerNumAsU32Tuple(Var, Var, Var, NumType),
     LiftIsize(Var, Var),

@@ -25,7 +25,7 @@ jobs:
     - run: cargo install --git https://github.com/vmx/wasm-multi-value-reverse-polyfill --locked
 
     - name: cargo test
-      run: cargo test --all-features --workspace
+      run: cargo test --features test_runner --workspace
 
   rustfmt:
     runs-on: ubuntu-latest
