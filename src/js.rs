@@ -582,7 +582,7 @@ impl JsGenerator {
                 }
             }
             Instr::LowerNum(in_, out, _num) => {
-                quote! (#(self.var(out)) = #(self.var(in_));)
+                quote!(#(self.var(out)) = #(self.var(in_));)
             }
             Instr::LiftNum(in_, out, _num) => {
                 quote!(const #(self.var(out)) = #(self.var(in_));)
