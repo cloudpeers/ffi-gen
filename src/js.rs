@@ -169,7 +169,7 @@ impl TsGenerator {
         let len = abi_args.len();
         let args = quote!(#(for (idx, (name, ty)) in abi_args.iter().enumerate() join (, ) =>
             #(match ty {
-                AbiType::Option(inner) if idx < len - 1 => #(self.ident(name)): #(self.generate_return_type(Some(inner))) #("| undefined"),
+                AbiType::Option(inner) if idx < len - 1 => #(self.ident(name)): #(self.generate_return_type(Some(inner))) #("| null"),
                 _ => #(self.ident(name)): #(self.generate_return_type(Some(ty)))
             })
         ));

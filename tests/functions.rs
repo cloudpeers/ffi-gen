@@ -682,7 +682,7 @@ compile_pass! {
 
         fetch(url, imports): Promise<void>;
 
-        lastRequiredArg(actor: string | undefined, perm: number): number;
+        lastRequiredArg(actor: string | null, perm: number): number;
 
         lastOptArg(actor: string?): number;
     })
