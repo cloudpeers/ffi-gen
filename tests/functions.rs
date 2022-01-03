@@ -662,6 +662,32 @@ compile_pass! {
     })
 }
 
+compile_pass! {
+    ts_optional_arg,
+    "fn last_required_arg(actor: Option<string>, perm: u8) -> Result<u8>;
+    fn last_opt_arg(actor: Option<string>) -> Result<u8>;",
+    (
+    pub fn last_required_arg(_actor: Option<String>, perm: u8) -> Result<u8, &'static str> {
+        Ok(perm)
+    }
+    pub fn last_opt_arg(_actor: Option<String>) -> Result<u8, &'static str> {
+        Ok(42)
+    }),
+    ( ),
+    ( ),
+    ( ),
+    (
+    export class Api {
+        constructor();
+
+        fetch(url, imports): Promise<void>;
+
+        lastRequiredArg(actor: string | null, perm: number): number;
+
+        lastOptArg(actor: string?): number;
+    })
+}
+
 /*compile_pass! {
     no_args_ret_opt_void,
     "fn fallible(arg: i32) -> Option<()>;",
