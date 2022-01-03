@@ -148,7 +148,7 @@ impl TsGenerator {
 
     fn generate_function(&self, func: AbiFunction) -> js::Tokens {
         let ffi = Abi::Wasm32.import(&func);
-        let args = quote!(#(for (name, ty) in &ffi.abi_args join (, ) => #(self.ident(name)): #(self.generate_return_type(Some(ty)))));
+        let args = self.generate_args(&ffi.abi_args);
         let ret = self.generate_return_type(ffi.abi_ret.as_ref());
         let name = self.ident(&func.name);
         let fun = match &func.ty {
@@ -163,6 +163,17 @@ impl TsGenerator {
             #(self.gen_doc(func.doc))
             #fun
         }
+    }
+
+    fn generate_args(&self, abi_args: &[(String, AbiType)]) -> js::Tokens {
+        let len = abi_args.len();
+        let args = quote!(#(for (idx, (name, ty)) in abi_args.iter().enumerate() join (, ) =>
+            #(match ty {
+                AbiType::Option(inner) if idx < len - 1 => #(self.ident(name)): #(self.generate_return_type(Some(inner))) #("| undefined"),
+                _ => #(self.ident(name)): #(self.generate_return_type(Some(ty)))
+            })
+        ));
+        args
     }
 
     fn generate_return_type(&self, ret: Option<&AbiType>) -> js::Tokens {
