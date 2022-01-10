@@ -258,12 +258,13 @@ impl JsGenerator {
             #(static_literal("/* tslint:disable */"))
             #(static_literal("/* eslint:disable */"))
 
-            // a node fetch polyfill that won't trigger webpack
+            // a node fetch polyfill that won't trigger webpack or other bundlers
             // idea borrowed from:
             // https://github.com/dcodeIO/webassembly/blob/master/src/index.js#L223
             let fs;
             const fetch_polyfill = async (file) => {
-              const readFile = await import("fs").then(({ readFile }) => readFile);
+                const readFile = await eval("mport('fs')".replace(/^/, 'i'))
+                    .then(({ readFile }) => readFile);
                 return new Promise((resolve, reject) => {
                     readFile(
                         file,
@@ -275,7 +276,7 @@ impl JsGenerator {
                                     ok: true,
                                 });
                         }
-                    );
+                        );
                 });
             }
 
@@ -286,7 +287,7 @@ impl JsGenerator {
                 #(static_literal("// patch the `importObject` while loading the WASM module."))
                 window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
             } else {
-                import("node:stream/web").then(pkg => {
+                eval("mport('node:stream/web')".replace(/^/, 'i')).then(pkg => {
                     ReadableStream = pkg.ReadableStream;
                 });
                 #(static_literal("// Workaround for combined use with `wasm-bindgen`, so we don't have to"))

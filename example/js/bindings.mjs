@@ -6,7 +6,9 @@
 
 let fs;
 const fetch_polyfill = async (file) => {
-  const readFile = await import("fs").then(({ readFile }) => readFile);
+  const readFile = await eval("mport('fs')".replace(/^/, "i")).then(
+    ({ readFile }) => readFile
+  );
   return new Promise((resolve, reject) => {
     readFile(file, function (err, data) {
       return err
@@ -26,7 +28,7 @@ if (typeof window == "object") {
   // patch the `importObject` while loading the WASM module.
   window.__notifier_callback = (idx) => notifierRegistry.callbacks[idx]();
 } else {
-  import("node:stream/web").then((pkg) => {
+  eval("mport('node:stream/web')".replace(/^/, "i")).then((pkg) => {
     ReadableStream = pkg.ReadableStream;
   });
   // Workaround for combined use with `wasm-bindgen`, so we don't have to
