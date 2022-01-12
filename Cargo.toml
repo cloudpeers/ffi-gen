@@ -3,7 +3,7 @@ members = [".", "macro", "example"]
 
 [package]
 name = "ffi-gen"
-version = "0.1.10"
+version = "0.1.11"
 edition = "2021"
 description = "Call rust from any language."
 repository = "https://github.com/cloudpeers/ffi-gen"
