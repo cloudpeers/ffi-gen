@@ -178,8 +178,9 @@ const nativeStream = (box, nativePoll) => {
       const nextIdx = notifierRegistry.reserveSlot();
       const doneIdx = notifierRegistry.reserveSlot();
       const nextNotifier = () =>
-        setImmediate(() =>
-          poll((x) => controller.enqueue(x), nextIdx, doneIdx)
+        setTimeout(
+          () => poll((x) => controller.enqueue(x), nextIdx, doneIdx),
+          0
         );
       const doneNotifier = () => {
         notifierRegistry.unregisterNotifier(nextIdx);
