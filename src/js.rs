@@ -436,9 +436,9 @@ impl JsGenerator {
                     start(controller) {
                         const nextIdx = notifierRegistry.reserveSlot();
                         const doneIdx = notifierRegistry.reserveSlot();
-                        const nextNotifier = () => setImmediate(() =>
-                            poll(x => controller.enqueue(x), nextIdx, doneIdx)
-                        );
+                        const nextNotifier = () => setTimeout(() =>
+                            poll(x => controller.enqueue(x), nextIdx, doneIdx),
+                            0);
                         const doneNotifier = () => {
                             notifierRegistry.unregisterNotifier(nextIdx);
                             notifierRegistry.unregisterNotifier(doneIdx);
