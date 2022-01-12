@@ -326,7 +326,7 @@ impl JsGenerator {
                     this.ptr = ptr;
                     this.dropped = false;
                     this.moved = false;
-                    dropRegistry.register(this, destructor);
+                    dropRegistry.register(this, destructor, this);
                     this.destructor = destructor;
                 }
 
