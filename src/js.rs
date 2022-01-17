@@ -391,15 +391,12 @@ impl JsGenerator {
             const nativeFuture = (box, nativePoll) => {
                 const poll = (resolve, reject, idx) => {
                     try {
-                        console.log(poll);
                         const ret = nativePoll(box.borrow(), 0, BigInt(idx));
-                        console.log(ret);
                         if (ret == null) {
                             return;
                         }
                         resolve(ret);
                     } catch(err) {
-                        console.log("error", err);
                         reject(err);
                     }
                     notifierRegistry.unregisterNotifier(idx);
