@@ -17,7 +17,7 @@ use crate::dart::DartGenerator;
 use crate::js::{JsGenerator, TsGenerator, WasmMultiValueShim};
 use crate::parser::Interface;
 use crate::rust::RustGenerator;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 
@@ -62,7 +62,8 @@ impl FfiGen {
         let status = Command::new("dart")
             .arg("format")
             .arg(path.as_ref())
-            .status()?;
+            .status()
+            .context("dart not installed")?;
         if !status.success() {
             anyhow::bail!("dart format failed");
         }
@@ -77,7 +78,8 @@ impl FfiGen {
         let status = Command::new("prettier")
             .arg("--write")
             .arg(path.as_ref())
-            .status()?;
+            .status()
+            .context("prettier not installed")?;
         if !status.success() {
             anyhow::bail!("prettier failed");
         }
@@ -92,7 +94,8 @@ impl FfiGen {
         let status = Command::new("prettier")
             .arg("--write")
             .arg(path.as_ref())
-            .status()?;
+            .status()
+            .context("prettier not installed")?;
         if !status.success() {
             anyhow::bail!("prettier failed");
         }
