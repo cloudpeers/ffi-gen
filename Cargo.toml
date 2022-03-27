@@ -15,7 +15,7 @@ test_runner = ["tempfile", "trybuild"]
 
 [dependencies]
 anyhow = "1.0.51"
-genco = "0.15.1"
+genco = "0.16.0"
 heck = "0.4.0"
 pest = "2.1.3"
 pest_derive = "2.1.0"
